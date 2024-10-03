@@ -1,8 +1,3 @@
-# Copyright (c) 2022-2024, The Isaac Lab Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
 """
 This script borrows from quadrupeds.py to load and visualize motions
 
@@ -46,6 +41,17 @@ from omni.isaac.lab.assets import Articulation
 ##
 from omni.isaac.lab_assets.anymal import ANYMAL_D_CFG  # isort:skip
 
+
+def load_motion_data(data_path: str) -> torch.Tensor:
+    """Loads the motion data from the specified relative path."""
+    # get the absolute path
+    data_path = os.path.abspath(data_path)
+    # load the motion data
+    motion_data = torch.load(data_path)
+    # return the motion data
+    return motion_data
+
+
 def define_origins(num_origins: int, spacing: float) -> list[list[float]]:
     """Defines the origins of the the scene."""
     # create tensor based on number of environments
@@ -86,76 +92,112 @@ def design_scene() -> tuple[dict, list[list[float]]]:
     return scene_entities, origins
 
 
-def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articulation], origins: torch.Tensor):
-    # load motion from .pt
-    data_path = os.path.join("motion_data", "motion_data_walk03.pt")
-    data_path = os.path.abspath(data_path)
+def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Articulation], origins: torch.Tensor):
+    """Visualizes the motion data."""
+    motion_dict = {}
+    motion_keys = []
 
-    motion_data = torch.load(data_path)
+    # for every file ended in .pt in the motion_data folder
+    for file in os.listdir("motion_data"):
+        if file.endswith(".pt"):
+            # load the motion data
+            loaded_data = torch.load(os.path.join("motion_data", file))
+            # append to the dict and record key
+            motion_dict[file] = loaded_data
+            motion_keys.append(file)
 
-    # split data into components
-    base_pos = motion_data[:, :, 0:3]                   # base position in global frame
-    base_quat = motion_data[:, :, 3:7]                  # base orientation quaternion in global frame
-    base_v = motion_data[:, :, 7:10]                    # base velocity in local frame
-    base_w = motion_data[:, :, 10:13]                   # base angular velocity in local frame
-    projected_gravity = motion_data[:, :, 13:16]        # projected gravity onto base
-    joint_angles = motion_data[:, :, 16:28]                # joint angles
-    joint_vels = motion_data[:, :, 28:40]                # joint angular velocities
+    data_num = 0
+    while True:
+        # get the motion data
+        motion_data = motion_dict[motion_keys[data_num]]
 
-    """Runs the simulation loop."""
-    # Define simulation stepping
-    sim_dt = sim.get_physics_dt()
-    sim_time = 0.0
-    count = 0
-    # Simulate physics
-    while simulation_app.is_running():
-        # reset
-        if count % 400 == 0:
+        # split data into components
+        # base_pos = motion_data[:, :, 0:3]  # base position in global frame
+        # base_quat = motion_data[:, :, 3:7]  # base orientation quaternion in global frame
+        # base_v = motion_data[:, :, 7:10]  # base velocity in local frame
+        # base_w = motion_data[:, :, 10:13]  # base angular velocity in local frame
+        # projected_gravity = motion_data[:, :, 13:16]  # projected gravity onto base
+        joint_angles = torch.cat(
+            (
+                motion_data[:, :, 16],
+                motion_data[:, :, 19],
+                motion_data[:, :, 22],
+                motion_data[:, :, 25],
+                motion_data[:, :, 17],
+                motion_data[:, :, 20],
+                motion_data[:, :, 23],
+                motion_data[:, :, 26],
+                motion_data[:, :, 18],
+                motion_data[:, :, 21],
+                motion_data[:, :, 24],
+                motion_data[:, :, 27],
+            )
+        ).unsqueeze(
+            0
+        )  # joint angles
+
+        # joint_vels = torch.cat((motion_data[:, :, 28],
+        #                         motion_data[:, :, 31],
+        #                         motion_data[:, :, 34],
+        #                         motion_data[:, :, 37],
+        #                         motion_data[:, :, 29],
+        #                         motion_data[:, :, 32],
+        #                         motion_data[:, :, 35],
+        #                         motion_data[:, :, 38],
+        #                         motion_data[:, :, 30],
+        #                         motion_data[:, :, 33],
+        #                         motion_data[:, :, 36],
+        #                         motion_data[:, :, 39])).unsqueeze(0)  # joint velocities
+
+        joint_vels = torch.zeros_like(joint_angles)  # joint positions don't seem to matter..?
+
+        """Runs the simulation loop."""
+        # Define simulation stepping
+        sim_dt = sim.get_physics_dt()  # 0.01s
+        sim_time = 0.0
+        count = 0
+        # Simulate physics
+        while simulation_app.is_running() and count < 400:
+            # reset
+            robot = entities["anymal_d"]
+
             # reset counters
             sim_time = 0.0
-            count = 0
-            # reset robots
-            for index, robot in enumerate(entities.values()):
-                root_state[:, :3] = origins[index]
-                root_state[:, 4:7] = 0.0
-                root_state[:, 3] = 1.0
-                root_state[:, 7:] = 0.0
-                
-                # root state
-                root_state = robot.data.default_root_state.clone()
-                root_state[:, :3] = base_pos[:, count, :].unsqueeze(0)
-                root_state[:, 3:7] = base_quat[:, count, :].unsqueeze(0)
-                root_state[:, 7:10] = base_v[:, count, :].unsqueeze(0)
-                root_state[:, 10:] = base_w[:, count, :].unsqueeze(0)
-                robot.write_root_state_to_sim(root_state)
 
-                #joint state                
-                joint_pos = joint_angles[:,count, :]
-                joint_pos = joint_pos.unsqueeze(0)
-                
-                joint_vel = joint_vels[:, count, :]
-                joint_vel = joint_vel.unsqueeze(0)
-                
-                robot.write_joint_state_to_sim(joint_pos, joint_vel)
-                # reset the internal state
-                robot.reset()
-            print("[INFO]: Resetting robots state...")
-        # apply default actions to the quadrupedal robots
-        for robot in entities.values():
-            # generate random joint positions
-            joint_pos_target = robot.data.default_joint_pos + torch.randn_like(robot.data.joint_pos) * 0.1
-            # apply action to the robot
-            robot.set_joint_position_target(joint_pos_target)
-            # write data to sim
-            robot.write_data_to_sim()
-        # perform step
-        sim.step()
-        # update sim-time
-        sim_time += sim_dt
-        count += 1
-        # update buffers
-        for robot in entities.values():
+            # root state
+            root_state = robot.data.default_root_state.clone()
+            root_state[:, :3] = origins[0]
+            root_state[:, 4:7] = 0.0
+            root_state[:, 3] = 1.0
+            root_state[:, 7:] = 0.0
+            robot.write_root_state_to_sim(root_state)
+
+            # joint state
+            joint_pos = joint_angles[:, :, count // 2]
+            joint_pos = joint_pos.unsqueeze(0)
+            joint_vel = joint_vels[:, :, count // 2]
+            joint_vel = joint_vel.unsqueeze(0)
+
+            # write joint angle and velocity information to simulation
+            robot.write_joint_state_to_sim(joint_pos, joint_vel)
+
+            # reset the internal state
+            robot.reset()
+
+            # perform step
+            sim.step()
+            # update sim-time
+            sim_time += sim_dt
+            count += 1
+            # update buffers
             robot.update(sim_dt)
+
+            # Uncomment to replay same imitation data
+            # if count == 400:
+            #     count = 0
+            #     print("RESETTING IMITATION")
+
+        data_num = (data_num + 1) if data_num < 2 else 0
 
 
 def main():
@@ -173,7 +215,7 @@ def main():
     # Now we are ready!
     print("[INFO]: Setup complete...")
     # Run the simulator
-    run_simulator(sim, scene_entities, scene_origins)
+    visualize_motion(sim, scene_entities, scene_origins)
 
 
 if __name__ == "__main__":
