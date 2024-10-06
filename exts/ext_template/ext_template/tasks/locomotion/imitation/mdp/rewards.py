@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 
 import torch
 from typing import TYPE_CHECKING
@@ -9,6 +10,8 @@ from omni.isaac.lab.assets import Articulation
 
 if TYPE_CHECKING:
     from omni.isaac.lab.envs import ManagerBasedRLEnv
+
+# from IsaacLabImitateAnymal.motion_data import motion_loader
 
 
 def feet_air_time(
@@ -29,7 +32,8 @@ def feet_air_time(
     last_air_time = contact_sensor.data.last_air_time[:, sensor_cfg.body_ids]
     reward = torch.sum((last_air_time - threshold) * first_contact, dim=1)
     # no reward for zero command
-    reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
+    reward *= torch.norm(env.command_manager.get_command(command_name)[:, 12:], dim=1) > 0.1
+    # reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
     return reward
 
 
@@ -55,3 +59,40 @@ def feet_air_time_positive_biped(
     # no reward for zero command
     reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
     return reward
+
+def track_next_frame_vel(
+        env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+        ) -> torch.Tensor:
+    """ Simple L2 reward for tracking next frame motion """
+    asset: Articulation = env.scene[asset_cfg.name]
+    current_motion = asset.data.root_lin_vel_b[:, :2]
+    # get next motion command
+    next_vel_command = env.command_manager.get_command(command_name)[..., 12:14]
+    reward = -torch.sum(torch.square(next_vel_command - current_motion), dim=1) / 0.25
+
+    return torch.exp(reward) - 0.5
+
+def track_next_frame_ang_vel(
+        env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+        ) -> torch.Tensor:
+    """ Simple L2 reward for tracking next frame motion """
+    asset: Articulation = env.scene[asset_cfg.name]
+    current_motion = asset.data.root_ang_vel_b[:, 2]
+    # get next motion command
+    next_ang_vel_command = env.command_manager.get_command(command_name)[..., 14]
+    reward = -torch.square(next_ang_vel_command - current_motion) / 0.25
+
+    return torch.exp(reward) - 0.5
+
+def track_next_frame_joint(
+        env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+        ) -> torch.Tensor:
+    """ Simple L2 reward for tracking next frame motion """
+    asset: Articulation = env.scene[asset_cfg.name]
+    current_motion = asset.data.joint_pos[:, asset_cfg.joint_ids]
+    # get next motion command
+    next_joint_command = env.command_manager.get_command(command_name)[..., :12]
+    # compute the difference between the current and the next frame motion
+    reward = -torch.sum(torch.square(next_joint_command - current_motion), dim=1) / 0.25
+
+    return torch.exp(reward) - 0.5

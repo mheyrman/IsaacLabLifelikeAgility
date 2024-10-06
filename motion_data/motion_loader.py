@@ -110,11 +110,12 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
     while True:
         # get the motion data
         motion_data = motion_dict[motion_keys[data_num]]
-
+        print("motion_key: " + str(motion_keys[data_num]))
         # split data into components
         # base_pos = motion_data[:, :, 0:3]  # base position in global frame
         # base_quat = motion_data[:, :, 3:7]  # base orientation quaternion in global frame
-        # base_v = motion_data[:, :, 7:10]  # base velocity in local frame
+        base_v = motion_data[:, :, 7:10]  # base velocity in local frame
+        print(base_v)
         # base_w = motion_data[:, :, 10:13]  # base angular velocity in local frame
         # projected_gravity = motion_data[:, :, 13:16]  # projected gravity onto base
         joint_angles = torch.cat(
