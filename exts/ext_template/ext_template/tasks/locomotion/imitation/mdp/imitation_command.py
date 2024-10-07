@@ -53,6 +53,8 @@ class ImitationCommand(CommandTerm):
 
         # -- data for visualization
         motion_path = os.path.join("motion_data", "motion_data_walk03.pt")
+        # motion_path = os.path.join("motion_data", "motion_data_jump01_new.pt")
+
         data_path = os.path.abspath(motion_path)
 
         motion_data = torch.load(data_path)
@@ -73,8 +75,8 @@ class ImitationCommand(CommandTerm):
                 ))
         
         # vel x, vel y, ang vel z
-        base_vel = torch.cat((motion_data[..., 7], motion_data[..., 8], torch.zeros_like(motion_data[..., 12], device=self.device)))
-        # base_vel = torch.cat((motion_data[..., 7], motion_data[..., 8], motion_data[..., 12]))
+        # base_vel = torch.cat((motion_data[..., 7], motion_data[..., 8], torch.zeros_like(motion_data[..., 12], device=self.device)))
+        base_vel = torch.cat((motion_data[..., 7], motion_data[..., 8], motion_data[..., 12]))
 
         # self.motion_data (14, n)
         self.motion_data = torch.cat((joint_angles, base_vel), dim=0)
