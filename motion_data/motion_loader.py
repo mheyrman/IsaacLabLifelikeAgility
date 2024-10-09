@@ -96,15 +96,18 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
     """Visualizes the motion data."""
     motion_dict = {}
     motion_keys = []
+    num = 0
 
     # for every file ended in .pt in the motion_data folder
     for file in os.listdir("motion_data"):
+        print("file: " + file)
         if file.endswith(".pt"):
             # load the motion data
             loaded_data = torch.load(os.path.join("motion_data", file))
             # append to the dict and record key
             motion_dict[file] = loaded_data
             motion_keys.append(file)
+            num += 1
 
     data_num = 0
     while True:
@@ -112,10 +115,9 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
         motion_data = motion_dict[motion_keys[data_num]]
         print("motion_key: " + str(motion_keys[data_num]))
         # split data into components
-        # base_pos = motion_data[:, :, 0:3]  # base position in global frame
+        base_pos = motion_data[:, :, 0:3]  # base position in global frame
         # base_quat = motion_data[:, :, 3:7]  # base orientation quaternion in global frame
         base_v = motion_data[:, :, 7:10]  # base velocity in local frame
-        print(base_v)
         # base_w = motion_data[:, :, 10:13]  # base angular velocity in local frame
         # projected_gravity = motion_data[:, :, 13:16]  # projected gravity onto base
         joint_angles = torch.cat(
@@ -193,12 +195,13 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
             # update buffers
             robot.update(sim_dt)
 
+
             # Uncomment to replay same imitation data
             # if count == 400:
             #     count = 0
             #     print("RESETTING IMITATION")
 
-        data_num = (data_num + 1) if data_num < 2 else 0
+        data_num = (data_num + 1) if data_num < (num - 1) else 0
 
 
 def main():

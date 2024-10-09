@@ -18,3 +18,5 @@ class ImitationCommandCfg(CommandTermCfg):
     asset_name: str = MISSING
 
     rel_standing_envs: float = MISSING
+
+    terms: list = MISSING

@@ -65,24 +65,39 @@ def track_next_frame_vel(
         ) -> torch.Tensor:
     """ Simple L2 reward for tracking next frame motion """
     asset: Articulation = env.scene[asset_cfg.name]
-    current_motion = asset.data.root_lin_vel_b[:, :2]
+    current_motion = asset.data.root_lin_vel_b
     # get next motion command
-    next_vel_command = env.command_manager.get_command(command_name)[..., 12:14]
-    reward = -torch.sum(torch.square(next_vel_command - current_motion), dim=1) / 0.25
+    next_vel_command = env.command_manager.get_command(command_name)[..., 24:27]
+    reward = -torch.norm((next_vel_command - current_motion), dim=1) / 0.5
+    # print("desired vel: ", next_vel_command)
+    # print("current vel: ", current_motion)
 
-    return torch.exp(reward) - 0.5
+    return torch.exp(reward)
+
 
 def track_next_frame_ang_vel(
         env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
         ) -> torch.Tensor:
     """ Simple L2 reward for tracking next frame motion """
     asset: Articulation = env.scene[asset_cfg.name]
-    current_motion = asset.data.root_ang_vel_b[:, 2]
+    current_motion = asset.data.root_ang_vel_b
     # get next motion command
-    next_ang_vel_command = env.command_manager.get_command(command_name)[..., 14]
-    reward = -torch.square(next_ang_vel_command - current_motion) / 0.25
+    next_ang_vel_command = env.command_manager.get_command(command_name)[..., 27:30]
+    reward = -torch.sum(torch.square(next_ang_vel_command - current_motion), dim=1) / 0.5
 
-    return torch.exp(reward) - 0.5
+    return torch.exp(reward)
+
+def track_next_frame_proj_grav(
+        env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+        ) -> torch.Tensor:
+    """ Simple L2 reward for tracking next frame motion """
+    asset: Articulation = env.scene[asset_cfg.name]
+    current_motion = asset.data.projected_gravity_b
+    # get next motion command
+    next_proj_grav_command = env.command_manager.get_command(command_name)[..., 30:33]
+    reward = -torch.sum(torch.square(next_proj_grav_command - current_motion), dim=1) / 0.25
+    
+    return torch.exp(reward)
 
 def track_next_frame_joint(
         env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
@@ -93,6 +108,31 @@ def track_next_frame_joint(
     # get next motion command
     next_joint_command = env.command_manager.get_command(command_name)[..., :12]
     # compute the difference between the current and the next frame motion
-    reward = -torch.sum(torch.square(next_joint_command - current_motion), dim=1) / 0.25
+    reward = -torch.sum(torch.square(next_joint_command - current_motion), dim=1) / 0.5
 
-    return torch.exp(reward) - 0.5
+    return torch.exp(reward)
+
+def track_next_frame_joint_vel(
+        env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+        ) -> torch.Tensor:
+    """ Simple L2 reward for tracking next frame motion """
+    asset: Articulation = env.scene[asset_cfg.name]
+    current_motion = asset.data.joint_vel[:, asset_cfg.joint_ids]
+    # get next motion command
+    next_joint_vel_command = env.command_manager.get_command(command_name)[..., 12:24]
+    # compute the difference between the current and the next frame motion
+    reward = -torch.sum(torch.square(next_joint_vel_command - current_motion), dim=1) / 0.25
+
+    return torch.exp(reward)
+
+def track_base_height(
+        env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+        ) -> torch.Tensor:
+    """ Simple L2 reward for tracking next frame motion """
+    asset: Articulation = env.scene[asset_cfg.name]
+    current_motion = asset.data.root_pos_w[..., 2]
+    # get next motion command
+    next_base_height_command = env.command_manager.get_command(command_name)[..., -1]
+    reward = torch.square(next_base_height_command - current_motion)
+
+    return reward
