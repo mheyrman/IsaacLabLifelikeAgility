@@ -9,7 +9,7 @@ from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import (
 @configclass
 class AnymalDImitatePPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 1000
+    max_iterations = 3000
     save_interval = 500
     experiment_name = "anymal_d_imitation"
     empirical_normalization = False

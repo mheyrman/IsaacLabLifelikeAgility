@@ -254,7 +254,7 @@ class RewardsCfg:
     )
     track_next_frame_vel = RewTerm(
         func=mdp.track_next_frame_vel,
-        weight=5.5,
+        weight=7.5,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
@@ -270,7 +270,7 @@ class RewardsCfg:
     )
     track_next_frame_proj_grav = RewTerm(
         func=mdp.track_next_frame_proj_grav,
-        weight=2.5,
+        weight=5.5,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
@@ -278,7 +278,7 @@ class RewardsCfg:
     )
     track_base_height = RewTerm(
         func=mdp.track_base_height,
-        weight=-30.0,
+        weight=-100.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
