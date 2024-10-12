@@ -116,9 +116,9 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
         print("motion_key: " + str(motion_keys[data_num]))
         # split data into components
         base_pos = motion_data[:, :, 0:3]  # base position in global frame
-        # base_quat = motion_data[:, :, 3:7]  # base orientation quaternion in global frame
+        base_quat = motion_data[:, :, 3:7]  # base orientation quaternion in global frame
         base_v = motion_data[:, :, 7:10]  # base velocity in local frame
-        # base_w = motion_data[:, :, 10:13]  # base angular velocity in local frame
+        base_w = motion_data[:, :, 10:13]  # base angular velocity in local frame
         # projected_gravity = motion_data[:, :, 13:16]  # projected gravity onto base
         joint_angles = torch.cat(
             (
@@ -170,8 +170,10 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
             # root state
             root_state = robot.data.default_root_state.clone()
             root_state[:, :3] = origins[0]
+            root_state[:, 2] = base_pos[:, count // 2, 2] + 0.5
             root_state[:, 4:7] = 0.0
             root_state[:, 3] = 1.0
+            root_state[:, 3:7] = base_quat[:, count // 2, :]
             root_state[:, 7:] = 0.0
             robot.write_root_state_to_sim(root_state)
 

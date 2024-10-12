@@ -238,7 +238,7 @@ class RewardsCfg:
     # -- task
     track_next_frame_joint = RewTerm(
         func=mdp.track_next_frame_joint,
-        weight=6.0,
+        weight=3.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
@@ -246,7 +246,7 @@ class RewardsCfg:
     )
     track_next_frame_joint_vel = RewTerm(
         func=mdp.track_next_frame_joint_vel,
-        weight=0.0,
+        weight=1.5,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
@@ -254,7 +254,7 @@ class RewardsCfg:
     )
     track_next_frame_vel = RewTerm(
         func=mdp.track_next_frame_vel,
-        weight=7.5,
+        weight=15.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
@@ -262,7 +262,7 @@ class RewardsCfg:
     )
     track_next_frame_ang_vel = RewTerm(
         func=mdp.track_next_frame_ang_vel,
-        weight=2.0,
+        weight=0.5,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
@@ -270,7 +270,7 @@ class RewardsCfg:
     )
     track_next_frame_proj_grav = RewTerm(
         func=mdp.track_next_frame_proj_grav,
-        weight=5.5,
+        weight=25.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),

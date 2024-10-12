@@ -67,12 +67,14 @@ def track_next_frame_vel(
     asset: Articulation = env.scene[asset_cfg.name]
     current_motion = asset.data.root_lin_vel_b
     # get next motion command
+    r_min = -1.0
+    r_max = 1.0
     next_vel_command = env.command_manager.get_command(command_name)[..., 24:27]
     reward = -torch.norm((next_vel_command - current_motion), dim=1) / 0.5
     # print("desired vel: ", next_vel_command)
     # print("current vel: ", current_motion)
-
     return torch.exp(reward)
+    # return r_min + (r_max - r_min) * torch.exp(reward)
 
 
 def track_next_frame_ang_vel(
@@ -82,10 +84,12 @@ def track_next_frame_ang_vel(
     asset: Articulation = env.scene[asset_cfg.name]
     current_motion = asset.data.root_ang_vel_b
     # get next motion command
+    r_min = -1.0
+    r_max = 1.0
     next_ang_vel_command = env.command_manager.get_command(command_name)[..., 27:30]
-    reward = -torch.sum(torch.square(next_ang_vel_command - current_motion), dim=1) / 0.5
-
+    reward = -torch.norm(next_ang_vel_command - current_motion, dim=1) / 0.25
     return torch.exp(reward)
+    # return r_min + (r_max - r_min) * torch.exp(reward)
 
 def track_next_frame_proj_grav(
         env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
@@ -108,8 +112,11 @@ def track_next_frame_joint(
     # get next motion command
     next_joint_command = env.command_manager.get_command(command_name)[..., :12]
     # compute the difference between the current and the next frame motion
-    reward = -torch.sum(torch.square(next_joint_command - current_motion), dim=1) / 0.5
-
+    # try using a gaussian reward w/ negative offset r = r_min + (r_max - r_min) * exp(a||x-y||^2)
+    # r_min = -1.0
+    # r_max = 1.0
+    reward = -torch.sum(torch.square(next_joint_command - current_motion), dim=1) / 1.0
+    # return torch.exp(reward)
     return torch.exp(reward)
 
 def track_next_frame_joint_vel(
@@ -121,7 +128,7 @@ def track_next_frame_joint_vel(
     # get next motion command
     next_joint_vel_command = env.command_manager.get_command(command_name)[..., 12:24]
     # compute the difference between the current and the next frame motion
-    reward = -torch.sum(torch.square(next_joint_vel_command - current_motion), dim=1) / 0.25
+    reward = -torch.norm(next_joint_vel_command - current_motion, dim=1) / 2.0
 
     return torch.exp(reward)
 

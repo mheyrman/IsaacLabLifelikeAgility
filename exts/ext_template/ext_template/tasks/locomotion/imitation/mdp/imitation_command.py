@@ -46,7 +46,7 @@ class ImitationCommand(CommandTerm):
         self.motion_dict = {}
         self.motion_keys = []
         self.motion_num = 0
-        self.motion_index = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device)
+        self.motion_index = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)
         for file in os.listdir("motion_data"):
             if file.endswith(".pt"):
                 motion_data = torch.load(os.path.join("motion_data", file))
@@ -206,25 +206,26 @@ class ImitationCommand(CommandTerm):
         # print(self.imitation_motion[0, 0])
 
         # change the motion sometimes
-        if torch.rand(1) < 5e-5:
+        if torch.rand(1) < 3e-12:
             print("CHANGING MOTION")
             self.motion_num += 1
+            print(self.motion_keys[self.motion_num % len(self.motion_keys)])
             self.imitation_motion = self.motion_dict[self.motion_keys[self.motion_num % len(self.motion_keys)]].to(self.device)
-            self.motion_index[...] = 0
+            self.motion_index[...] = 0.0
 
         if self.imitation_motion[0, 0] == 0.0:
             self.imitation_motion = self.motion_dict[self.motion_keys[self.motion_num % len(self.motion_keys)]].to(self.device)
-        self.motion_index[env_ids] = 0
-        self.imitation_command = torch.transpose(torch.index_select(self.imitation_motion, 1, self.motion_index % self.imitation_motion.shape[1]), 0, 1)
+        self.motion_index[env_ids] = 0.0
+        self.imitation_command = torch.transpose(torch.index_select(self.imitation_motion, 1, (self.motion_index // 1).type(torch.int32) % self.imitation_motion.shape[1]), 0, 1)
 
         #  torch.index_select(self.imitation_motion, 2, self.motion_index)
 
         # self.motion_index = 0
         # self.imitation_command = self.imitation_motion[..., (self.motion_index % self.imitation_motion.shape[2])]
         # print("whatev")
-        ## update standing envs
-        # r = torch.empty(len(env_ids), device=self.device)
-        # self.is_standing_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_standing_envs
+        # update standing envs
+        r = torch.empty(len(env_ids), device=self.device)
+        self.is_standing_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_standing_envs
 
 
     def _update_command(self):
@@ -233,19 +234,21 @@ class ImitationCommand(CommandTerm):
         """
         # cmd_tmp = self.imitation_command.clone().detach()
 
-        # standing_env_ids = self.is_standing_env.nonzero(as_tuple=False).flatten()
         # start_time = time.time()
-        self.imitation_command = torch.transpose(torch.index_select(self.imitation_motion, 1, self.motion_index % self.imitation_motion.shape[1]), 0, 1)
-        self.motion_index += 1
+        self.imitation_command = torch.transpose(torch.index_select(self.imitation_motion, 1, (self.motion_index // 1).type(torch.int32) % self.imitation_motion.shape[1]), 0, 1)
+        self.motion_index += 0.5
+        # print(self.motion_index)
         # self.imitation_command[...] = self.imitation_motion[..., (self.motion_index % self.imitation_motion.shape[2])]
         # end_time = time.time()
 
-        # # enforce 0 velocity
-        # cmd_tmp[..., 12:30] = 0.0
-        # cmd_tmp[..., 33] = 0.6
-        # # enforce default joint positions
-        # cmd_tmp[..., :12] = self.robot.data.default_joint_pos
+        # enforce 0 velocity
+        cmd_tmp = self.imitation_command.clone().detach()
+        cmd_tmp[..., 12:30] = 0.0
+        cmd_tmp[..., 33] = 0.6
+        # enforce default joint positions
+        cmd_tmp[..., :12] = self.robot.data.default_joint_pos
 
-        # # update the command
-        # self.imitation_command[standing_env_ids, :] = cmd_tmp[standing_env_ids, :]
-        # # print(f"Execution time: {end_time - start_time} seconds")
+        # update the command
+        standing_env_ids = self.is_standing_env.nonzero(as_tuple=False).flatten()
+        self.imitation_command[standing_env_ids, :] = cmd_tmp[standing_env_ids, :]
+        # print(f"Execution time: {end_time - start_time} seconds")
