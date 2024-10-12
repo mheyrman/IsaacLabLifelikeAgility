@@ -106,7 +106,7 @@ class CommandsCfg:
         asset_name="robot",
         resampling_time_range=(5.0, 5.0),
         rel_standing_envs=0.02,
-        terms=["joint_angles", "base_vel", "base_ang_vel"],
+        terms=["joint_angles", "base_vel"],
     )
 
     motion_data = ImitationCommandCfg(
@@ -238,7 +238,7 @@ class RewardsCfg:
     # -- task
     track_next_frame_joint = RewTerm(
         func=mdp.track_next_frame_joint,
-        weight=3.0,
+        weight=10.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
@@ -254,7 +254,7 @@ class RewardsCfg:
     )
     track_next_frame_vel = RewTerm(
         func=mdp.track_next_frame_vel,
-        weight=15.0,
+        weight=25.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
@@ -270,7 +270,7 @@ class RewardsCfg:
     )
     track_next_frame_proj_grav = RewTerm(
         func=mdp.track_next_frame_proj_grav,
-        weight=25.0,
+        weight=15.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
@@ -305,7 +305,7 @@ class RewardsCfg:
     # )
     feet_air_time = RewTerm(
         func=mdp.feet_air_time,
-        weight=10.0,
+        weight=30.0,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT"),
             "command_name": "joint_imitation",

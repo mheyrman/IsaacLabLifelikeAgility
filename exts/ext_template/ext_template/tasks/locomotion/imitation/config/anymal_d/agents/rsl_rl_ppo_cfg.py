@@ -9,7 +9,7 @@ from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import (
 @configclass
 class AnymalDImitatePPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 2000
+    max_iterations = 10000
     save_interval = 1000
     experiment_name = "anymal_d_imitation"
     empirical_normalization = False
@@ -19,7 +19,7 @@ class AnymalDImitatePPORunnerCfg(RslRlOnPolicyRunnerCfg):
         critic_hidden_dims=[512, 256, 128],
         activation="elu",
     )
-    algorithm = RslRlPpoAlgorithmCfg(
+    algorithm = RslRlPpoAlgorithmCfg(   
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,

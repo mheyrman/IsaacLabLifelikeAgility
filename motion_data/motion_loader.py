@@ -170,7 +170,7 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
             # root state
             root_state = robot.data.default_root_state.clone()
             root_state[:, :3] = origins[0]
-            root_state[:, 2] = base_pos[:, count // 2, 2] + 0.5
+            root_state[:, 2] = base_pos[:, count // 2, 2]
             root_state[:, 4:7] = 0.0
             root_state[:, 3] = 1.0
             root_state[:, 3:7] = base_quat[:, count // 2, :]

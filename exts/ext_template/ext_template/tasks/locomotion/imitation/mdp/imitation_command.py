@@ -195,34 +195,23 @@ class ImitationCommand(CommandTerm):
 
         This function is called when the command needs to be resampled.
         """
-        # self.data_index[env_ids] += 1
-        # self.motion_num += 1
-        # new_motion = self.motion_dict[self.motion_keys[self.motion_num % len(self.motion_keys)]]
-        # if self.imitation_motion.shape[2] != new_motion.shape[1]:
-        #     self.imitation_motion = torch.zeros(self.num_envs, 34, new_motion.shape[1], device=self.device)
-
-        #     for env_id in env_ids:
-        #         self.imitation_motion[env_id, ...] = self.motion_dict[self.motion_keys[self.motion_num % len(self.motion_keys)]]
-        # print(self.imitation_motion[0, 0])
 
         # change the motion sometimes
-        if torch.rand(1) < 3e-12:
-            print("CHANGING MOTION")
+        if torch.rand(1) < 5e-1:
+            # print("CHANGING MOTION")
             self.motion_num += 1
             print(self.motion_keys[self.motion_num % len(self.motion_keys)])
             self.imitation_motion = self.motion_dict[self.motion_keys[self.motion_num % len(self.motion_keys)]].to(self.device)
             self.motion_index[...] = 0.0
+            self.motion_index[env_ids] = 0.0
+            self.imitation_command = torch.transpose(torch.index_select(self.imitation_motion, 1, (self.motion_index // 1).type(torch.int32) % self.imitation_motion.shape[1]), 0, 1)
+
 
         if self.imitation_motion[0, 0] == 0.0:
             self.imitation_motion = self.motion_dict[self.motion_keys[self.motion_num % len(self.motion_keys)]].to(self.device)
-        self.motion_index[env_ids] = 0.0
-        self.imitation_command = torch.transpose(torch.index_select(self.imitation_motion, 1, (self.motion_index // 1).type(torch.int32) % self.imitation_motion.shape[1]), 0, 1)
+            self.motion_index[env_ids] = 0.0
+            self.imitation_command = torch.transpose(torch.index_select(self.imitation_motion, 1, (self.motion_index // 1).type(torch.int32) % self.imitation_motion.shape[1]), 0, 1)
 
-        #  torch.index_select(self.imitation_motion, 2, self.motion_index)
-
-        # self.motion_index = 0
-        # self.imitation_command = self.imitation_motion[..., (self.motion_index % self.imitation_motion.shape[2])]
-        # print("whatev")
         # update standing envs
         r = torch.empty(len(env_ids), device=self.device)
         self.is_standing_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_standing_envs
@@ -236,7 +225,7 @@ class ImitationCommand(CommandTerm):
 
         # start_time = time.time()
         self.imitation_command = torch.transpose(torch.index_select(self.imitation_motion, 1, (self.motion_index // 1).type(torch.int32) % self.imitation_motion.shape[1]), 0, 1)
-        self.motion_index += 0.5
+        self.motion_index += 0.25
         # print(self.motion_index)
         # self.imitation_command[...] = self.imitation_motion[..., (self.motion_index % self.imitation_motion.shape[2])]
         # end_time = time.time()
