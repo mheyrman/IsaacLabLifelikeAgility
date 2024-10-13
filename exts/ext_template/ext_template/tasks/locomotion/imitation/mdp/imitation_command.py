@@ -10,6 +10,7 @@ from __future__ import annotations
 from omni.isaac.lab.envs.manager_based_rl_env import ManagerBasedRLEnv
 from omni.isaac.lab.managers.manager_term_cfg import CommandTermCfg
 import torch
+from tensordict.tensordict import TensorDict
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
@@ -46,45 +47,46 @@ class ImitationCommand(CommandTerm):
         self.motion_dict = {}
         self.motion_keys = []
         self.motion_num = 0
+        self.motion_number = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device)
         self.motion_index = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)
         for file in os.listdir("motion_data"):
             if file.endswith(".pt"):
                 motion_data = torch.load(os.path.join("motion_data", file))
 
                 joint_angles = torch.cat((
-                                    motion_data[:, :200, 16],
-                                    motion_data[:, :200, 19],
-                                    motion_data[:, :200, 22],
-                                    motion_data[:, :200, 25],
-                                    motion_data[:, :200, 17],
-                                    motion_data[:, :200, 20],
-                                    motion_data[:, :200, 23],
-                                    motion_data[:, :200, 26],
-                                    motion_data[:, :200, 18],
-                                    motion_data[:, :200, 21],
-                                    motion_data[:, :200, 24],
-                                    motion_data[:, :200, 27],
+                                    motion_data[..., 16],
+                                    motion_data[..., 19],
+                                    motion_data[..., 22],
+                                    motion_data[..., 25],
+                                    motion_data[..., 17],
+                                    motion_data[..., 20],
+                                    motion_data[..., 23],
+                                    motion_data[..., 26],
+                                    motion_data[..., 18],
+                                    motion_data[..., 21],
+                                    motion_data[..., 24],
+                                    motion_data[..., 27],
                                 ))
                 joint_velocities = torch.cat((
-                            motion_data[:, :200, 28],
-                            motion_data[:, :200, 31],
-                            motion_data[:, :200, 34],
-                            motion_data[:, :200, 37],
-                            motion_data[:, :200, 29],
-                            motion_data[:, :200, 32],
-                            motion_data[:, :200, 35],
-                            motion_data[:, :200, 38],
-                            motion_data[:, :200, 30],
-                            motion_data[:, :200, 33],
-                            motion_data[:, :200, 36],
-                            motion_data[:, :200, 39],
+                            motion_data[..., 28],
+                            motion_data[..., 31],
+                            motion_data[..., 34],
+                            motion_data[..., 37],
+                            motion_data[..., 29],
+                            motion_data[..., 32],
+                            motion_data[..., 35],
+                            motion_data[..., 38],
+                            motion_data[..., 30],
+                            motion_data[..., 33],
+                            motion_data[..., 36],
+                            motion_data[..., 39],
                 ))
 
                 # vel x, vel y, ang vel z
-                base_vel = torch.cat((motion_data[:, :200, 7], motion_data[:, :200, 8], motion_data[:, :200, 9]))
-                base_ang_vel = torch.cat((motion_data[:, :200, 10], motion_data[:, :200, 11], motion_data[:, :200, 12]))
-                base_proj_grav = torch.cat((motion_data[:, :200, 13], motion_data[:, :200, 14], motion_data[:, :200, 15]))
-                base_height = motion_data[:, :200, 2]
+                base_vel = torch.cat((motion_data[..., 7], motion_data[..., 8], motion_data[..., 9]))
+                base_ang_vel = torch.cat((motion_data[..., 10], motion_data[..., 11], motion_data[..., 12]))
+                base_proj_grav = torch.cat((motion_data[..., 13], motion_data[..., 14], motion_data[..., 15]))
+                base_height = motion_data[..., 2]
 
                 # motion_data (34, n)
                 motion_data = torch.cat((
@@ -196,6 +198,24 @@ class ImitationCommand(CommandTerm):
         This function is called when the command needs to be resampled.
         """
 
+        # random_indices = torch.randint(
+        #     0, len(self.motion_keys), (len(env_ids),), device=self.device
+        # ).int() 
+        # self.motion_number[env_ids] = random_indices
+        # self.motion_index[env_ids] = 0.0
+        # imitation command is (num_envs, 34)
+        # for env in env_ids:
+        #     command = self.motion_dict[self.motion_keys[self.motion_number[env]]][..., (self.motion_index[env] // 1).type(torch.int32) % self.imitation_motion.shape[1]]
+        #     self.imitation_command[env] = command
+
+        # commands = torch.stack([
+        #     self.motion_dict[self.motion_keys[self.motion_number[env]]][
+        #         ..., (self.motion_index[env] // 1).type(torch.int32) % self.imitation_motion.shape[1]
+        #     ].to(self.device) for env in env_ids
+        # ])
+        # self.imitation_command[env_ids] = commands
+        # self.motion_index[env_ids] += 0.25
+
         # change the motion sometimes
         if torch.rand(1) < 5e-1:
             # print("CHANGING MOTION")
@@ -229,6 +249,22 @@ class ImitationCommand(CommandTerm):
         # print(self.motion_index)
         # self.imitation_command[...] = self.imitation_motion[..., (self.motion_index % self.imitation_motion.shape[2])]
         # end_time = time.time()
+        # commands = torch.stack([
+        #     self.motion_dict[self.motion_keys[self.motion_number[env]]][
+        #         ..., (self.motion_index[env] // 1).type(torch.int32) % self.imitation_motion.shape[1]
+        #     ].to(self.device) for env in env_ids
+        # ])
+
+        # do for all
+        # keys = list(map(self.motion_keys.__getitem__, self.motion_number))
+        # print(list(map(self.motion_dict.get, keys)).shape)
+        # commands = torch.stack([
+        #     list(map(self.motion_dict.get, keys))[
+        #         ..., (self.motion_index // 1).type(torch.int32) % self.imitation_motion.shape[1]
+        #     ].to(self.device)
+        # ])
+        # self.imitation_command = commands
+        # self.motion_index += 0.25
 
         # enforce 0 velocity
         cmd_tmp = self.imitation_command.clone().detach()

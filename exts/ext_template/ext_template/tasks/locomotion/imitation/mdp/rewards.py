@@ -115,7 +115,7 @@ def track_next_frame_joint(
     # try using a gaussian reward w/ negative offset r = r_min + (r_max - r_min) * exp(a||x-y||^2)
     # r_min = -1.0
     # r_max = 1.0
-    reward = -torch.sum(torch.square(next_joint_command - current_motion), dim=1) / 1.0
+    reward = -torch.sum(torch.square(next_joint_command - current_motion), dim=1) / 2.0
     # return torch.exp(reward)
     return torch.exp(reward)
 

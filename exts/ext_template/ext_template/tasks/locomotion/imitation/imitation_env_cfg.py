@@ -102,11 +102,12 @@ class CommandsCfg:
     )
 
     # Custom imitation command configuration
+    #         terms=["joint_angles", "base_vel", "base_ang_vel"],
     joint_imitation = ImitationCommandCfg(
         asset_name="robot",
         resampling_time_range=(5.0, 5.0),
         rel_standing_envs=0.02,
-        terms=["joint_angles", "base_vel"],
+        terms=["joint_angles", "base_vel", "base_ang_vel"],
     )
 
     motion_data = ImitationCommandCfg(
@@ -270,7 +271,7 @@ class RewardsCfg:
     )
     track_next_frame_proj_grav = RewTerm(
         func=mdp.track_next_frame_proj_grav,
-        weight=15.0,
+        weight=10.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
