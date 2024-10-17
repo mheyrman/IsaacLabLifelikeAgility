@@ -19,6 +19,7 @@ parser.add_argument(
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
+parser.add_argument("--ghost", type=bool, default=False, help="Have a ghost robot showing the motion data next to robot 0")
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -48,13 +49,26 @@ from omni.isaac.lab.utils.dict import print_dict
 from omni.isaac.lab_tasks.utils import get_checkpoint_path, parse_env_cfg
 from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, export_policy_as_onnx
 
+def load_motion() -> torch.Tensor():
+    """Loads motion data in motion_data path to replay concurrently"""
+    motion_data = []
+    # only works with 1 motion file
+    for file in os.listdir("motion_data"):
+        if file.endswith(".pt"):
+            motion_data = torch.load(os.path.join("motion_data", file))
+    return motion_data
 
 def main():
     """Play with RSL-RL agent."""
     # parse configuration
-    env_cfg = parse_env_cfg(
-        args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
-    )
+    if args_cli.ghost:
+        env_cfg = parse_env_cfg(
+            args_cli.task, device=args_cli.device, num_envs=2, use_fabric=not args_cli.disable_fabric
+        )
+    else:
+        env_cfg = parse_env_cfg(
+            args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
+        )
     agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(args_cli.task, args_cli)
 
     # specify directory for logging experiments
@@ -96,14 +110,76 @@ def main():
     # reset environment
     obs, _ = env.get_observations()
     timestep = 0
+    motion_step = 0
     # simulate environment
+    motion_data = load_motion()
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
+            # # move camera
+            # eye = robot_pos + (5.0, 5.0, 5.0)
+            # lookat = robot_pos
+            # env.unwrapped.sim.set_camera_view(eye=eye, target=lookat)   # broken
             # agent stepping
             actions = policy(obs)
             # env stepping
             obs, _, _, _ = env.step(actions)
+
+
+            if args_cli.ghost:
+                robot_pos = (env.unwrapped.scene["robot"].data.root_pos_w[0, 0].item(), env.unwrapped.scene["robot"].data.root_pos_w[0, 1].item(), env.unwrapped.scene["robot"].data.root_pos_w[0, 2].item())
+                robot_quat = (env.unwrapped.scene["robot"].data.root_quat_w[0, 0].item(), env.unwrapped.scene["robot"].data.root_quat_w[0, 1].item(), env.unwrapped.scene["robot"].data.root_quat_w[0, 2].item(), env.unwrapped.scene["robot"].data.root_quat_w[0, 3].item())
+                # ghost the robot
+                base_pos = motion_data[:, :, 0:3]  # base position in global frame
+                base_quat = motion_data[:, :, 3:7]  # base orientation quaternion in global frame
+                # projected_gravity = motion_data[:, :, 13:16]  # projected gravity onto base
+                joint_angles = torch.cat(
+                    (
+                        motion_data[:, :, 16],
+                        motion_data[:, :, 19],
+                        motion_data[:, :, 22],
+                        motion_data[:, :, 25],
+                        motion_data[:, :, 17],
+                        motion_data[:, :, 20],
+                        motion_data[:, :, 23],
+                        motion_data[:, :, 26],
+                        motion_data[:, :, 18],
+                        motion_data[:, :, 21],
+                        motion_data[:, :, 24],
+                        motion_data[:, :, 27],
+                    )
+                ).unsqueeze(
+                    0
+                )  # joint angles
+
+                joint_vels = torch.zeros_like(joint_angles)  # joint positions don't seem to matter..?
+
+                data_length = joint_angles.shape[2]
+                
+                robots = env.unwrapped.scene["robot"]   # ghost is robot 1
+                root_state = robots.data.default_root_state.clone()    # [pos, quat, lin_vel, ang_vel]
+                root_state[1, 0] = robot_pos[0] + 1.0
+                root_state[1, 1] = robot_pos[1] + 1.0
+                root_state[1, 2] = base_pos[:, motion_step  % data_length, 2]
+                root_state[1, 3] = base_quat[:, motion_step % data_length, 2]
+                root_state[1, 4] = base_quat[:, motion_step % data_length, 1]
+                root_state[1, 5] = base_quat[:, motion_step % data_length, 0]
+                root_state[1, 6] = base_quat[:, motion_step % data_length, 3]
+                # print(root_state.shape)
+                robots.write_root_state_to_sim(root_state=root_state[1,...].unsqueeze(0), env_ids=torch.tensor([1]).to(env.unwrapped.device))
+                
+                # joint state
+                joint_pos = joint_angles[:, :, motion_step % data_length]
+                joint_pos = joint_pos.unsqueeze(0).to(env.unwrapped.device)
+                joint_vel = joint_vels[:, :, motion_step % data_length]
+                joint_vel = joint_vel.unsqueeze(0).to(env.unwrapped.device)
+
+                # write joint angle and velocity information to simulation
+                robots.write_joint_state_to_sim(position=joint_pos, velocity=joint_vel, env_ids=torch.tensor([1]).to(env.unwrapped.device))
+                
+                motion_step += 1
+
+            # print(env_cfg.scene.robot.data.root_pos_w[0].detach().cpu())
         if args_cli.video:
             timestep += 1
             # Exit the play loop after recording one video

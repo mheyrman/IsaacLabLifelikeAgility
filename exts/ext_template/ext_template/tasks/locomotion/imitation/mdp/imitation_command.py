@@ -26,7 +26,6 @@ if TYPE_CHECKING:
     from omni.isaac.lab.envs import ManagerBasedEnv
 
     from .commands_cfg import ImitationCommandCfg
-# import time
 
 class ImitationCommand(CommandTerm):
     """Command generator for generating imitation commands.
@@ -44,11 +43,9 @@ class ImitationCommand(CommandTerm):
         self.robot: Articulation = env.scene[cfg.asset_name]
 
         # motion data
-        self.motion_dict = {}
-        self.motion_keys = []
-        self.motion_num = 0
-        self.motion_number = torch.zeros(self.num_envs, dtype=torch.int32, device=self.device)
-        self.motion_index = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)
+        motion_dict = {}
+        motion_indices = []
+        num_motions = 0
         for file in os.listdir("motion_data"):
             if file.endswith(".pt"):
                 motion_data = torch.load(os.path.join("motion_data", file))
@@ -84,7 +81,10 @@ class ImitationCommand(CommandTerm):
 
                 # vel x, vel y, ang vel z
                 base_vel = torch.cat((motion_data[..., 7], motion_data[..., 8], motion_data[..., 9]))
+                # base_vel_next is the next frame's base velocity
+                base_vel_next = torch.cat([base_vel[:, 1:], base_vel[:, -1:]], dim=1)
                 base_ang_vel = torch.cat((motion_data[..., 10], motion_data[..., 11], motion_data[..., 12]))
+                base_ang_vel_next = torch.cat([base_ang_vel[:, 1:], base_ang_vel[:, -1:]], dim=1)
                 base_proj_grav = torch.cat((motion_data[..., 13], motion_data[..., 14], motion_data[..., 15]))
                 base_height = motion_data[..., 2]
 
@@ -94,16 +94,28 @@ class ImitationCommand(CommandTerm):
                     joint_velocities,
                     base_vel, base_ang_vel,
                     base_proj_grav,
-                    base_height
+                    base_height,
+                    base_vel_next,
+                    base_ang_vel_next
                 ), dim=0)
 
-                self.motion_dict[file] = motion_data
-                self.motion_keys.append(file)
+                motion_dict[file] = motion_data
+                if motion_indices == []:
+                    motion_indices.append(0)
+                else:
+                    motion_indices.append(motion_indices[num_motions - 1] + motion_data.shape[1])
+                num_motions += 1
+        motion_indices.append(motion_indices[num_motions - 1] + motion_data.shape[1]) # add terminal index
 
+    
         # create buffers to store the command
         # -- command: all local frame data
-        self.imitation_motion = torch.zeros(34, 200, device=self.device)
-        self.imitation_command = torch.zeros(self.num_envs, 34, device=self.device)
+        self.motion = torch.cat([m.to(self.device) for m in motion_dict.values()], dim=1)
+        self.start_indices = torch.tensor(motion_indices, device=self.device)
+        self.motion_index = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)
+        self.motion_number = torch.randint(0, num_motions, (self.num_envs,), device=self.device)
+
+        self.imitation_command = torch.zeros(self.num_envs, self.motion.shape[0], device=self.device)
         self.is_standing_env = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
         # -- metrics
@@ -128,6 +140,10 @@ class ImitationCommand(CommandTerm):
             "base_proj_grav_len": 3,
             "base_height": 33,
             "base_height_len": 1,
+            "base_vel_next_start": 34,
+            "base_vel_next_len": 3,
+            "base_ang_vel_next_start": 37,
+            "base_ang_vel_next_len": 3,
         }
 
 
@@ -198,39 +214,15 @@ class ImitationCommand(CommandTerm):
         This function is called when the command needs to be resampled.
         """
 
-        # random_indices = torch.randint(
-        #     0, len(self.motion_keys), (len(env_ids),), device=self.device
-        # ).int() 
-        # self.motion_number[env_ids] = random_indices
-        # self.motion_index[env_ids] = 0.0
-        # imitation command is (num_envs, 34)
-        # for env in env_ids:
-        #     command = self.motion_dict[self.motion_keys[self.motion_number[env]]][..., (self.motion_index[env] // 1).type(torch.int32) % self.imitation_motion.shape[1]]
-        #     self.imitation_command[env] = command
-
-        # commands = torch.stack([
-        #     self.motion_dict[self.motion_keys[self.motion_number[env]]][
-        #         ..., (self.motion_index[env] // 1).type(torch.int32) % self.imitation_motion.shape[1]
-        #     ].to(self.device) for env in env_ids
-        # ])
-        # self.imitation_command[env_ids] = commands
-        # self.motion_index[env_ids] += 0.25
-
         # change the motion sometimes
-        if torch.rand(1) < 5e-1:
-            # print("CHANGING MOTION")
-            self.motion_num += 1
-            print(self.motion_keys[self.motion_num % len(self.motion_keys)])
-            self.imitation_motion = self.motion_dict[self.motion_keys[self.motion_num % len(self.motion_keys)]].to(self.device)
-            self.motion_index[...] = 0.0
-            self.motion_index[env_ids] = 0.0
-            self.imitation_command = torch.transpose(torch.index_select(self.imitation_motion, 1, (self.motion_index // 1).type(torch.int32) % self.imitation_motion.shape[1]), 0, 1)
-
-
-        if self.imitation_motion[0, 0] == 0.0:
-            self.imitation_motion = self.motion_dict[self.motion_keys[self.motion_num % len(self.motion_keys)]].to(self.device)
-            self.motion_index[env_ids] = 0.0
-            self.imitation_command = torch.transpose(torch.index_select(self.imitation_motion, 1, (self.motion_index // 1).type(torch.int32) % self.imitation_motion.shape[1]), 0, 1)
+        # if torch.rand(1) < 5e-3:
+        # print("Resampled")
+        self.motion_number[env_ids] = torch.randint(0, len(self.start_indices) - 1, (len(env_ids),), device=self.device)
+        # print(self.motion_number[env_ids])
+        # make motion_index the index in self.start_indices where the motion starts
+        self.motion_index[env_ids] = self.start_indices[self.motion_number[env_ids]].float()
+        self.imitation_command[env_ids] = torch.transpose(torch.index_select(self.motion, 1, (self.motion_index[env_ids] // 1).type(torch.int32)), 0, 1)
+        self.motion_index[env_ids] += 1.0
 
         # update standing envs
         r = torch.empty(len(env_ids), device=self.device)
@@ -241,30 +233,10 @@ class ImitationCommand(CommandTerm):
         """
         Post-process the imitation command.
         """
-        # cmd_tmp = self.imitation_command.clone().detach()
-
-        # start_time = time.time()
-        self.imitation_command = torch.transpose(torch.index_select(self.imitation_motion, 1, (self.motion_index // 1).type(torch.int32) % self.imitation_motion.shape[1]), 0, 1)
-        self.motion_index += 0.25
-        # print(self.motion_index)
-        # self.imitation_command[...] = self.imitation_motion[..., (self.motion_index % self.imitation_motion.shape[2])]
-        # end_time = time.time()
-        # commands = torch.stack([
-        #     self.motion_dict[self.motion_keys[self.motion_number[env]]][
-        #         ..., (self.motion_index[env] // 1).type(torch.int32) % self.imitation_motion.shape[1]
-        #     ].to(self.device) for env in env_ids
-        # ])
-
-        # do for all
-        # keys = list(map(self.motion_keys.__getitem__, self.motion_number))
-        # print(list(map(self.motion_dict.get, keys)).shape)
-        # commands = torch.stack([
-        #     list(map(self.motion_dict.get, keys))[
-        #         ..., (self.motion_index // 1).type(torch.int32) % self.imitation_motion.shape[1]
-        #     ].to(self.device)
-        # ])
-        # self.imitation_command = commands
-        # self.motion_index += 0.25
+        self.imitation_command[...] = torch.transpose(torch.index_select(self.motion, 1, (self.motion_index // 1).type(torch.int32)), 0, 1)
+        self.motion_index += 1.0
+        # if self.motion_index[env] >= self.start_indices[self.motion_number[env] + 1] then return to the start of the motion
+        self.motion_index = torch.where(self.motion_index >= self.start_indices[self.motion_number + 1], self.start_indices[self.motion_number], self.motion_index)
 
         # enforce 0 velocity
         cmd_tmp = self.imitation_command.clone().detach()
