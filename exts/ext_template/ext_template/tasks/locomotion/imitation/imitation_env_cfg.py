@@ -107,7 +107,7 @@ class CommandsCfg:
         asset_name="robot",
         resampling_time_range=(5.0, 5.0),
         rel_standing_envs=0.02,
-        terms=["base_vel", "base_vel_next", "base_ang_vel", "base_ang_vel_next", "base_proj_grav"],
+        terms=["joint_angles", "base_proj_grav", "base_height"],
     )
 
     motion_data = ImitationCommandCfg(
@@ -115,7 +115,6 @@ class CommandsCfg:
         resampling_time_range=(5.0, 5.0),
         rel_standing_envs=0.02,
     )
-
 
 
 @configclass
@@ -134,14 +133,13 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
+        motion_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "motion_data"})
         base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))
         base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
         )
-        motion_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "joint_imitation"})
-        velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
         joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
         joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5))
         actions = ObsTerm(func=mdp.last_action)
@@ -239,35 +237,27 @@ class RewardsCfg:
     # -- task
     track_next_frame_joint = RewTerm(
         func=mdp.track_next_frame_joint,
-        weight=0.2,
+        weight=0.5,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
-        }
+        },
     )
     track_next_frame_joint_vel = RewTerm(
         func=mdp.track_next_frame_joint_vel,
-        weight=0.0,
+        weight=1.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
-        }
+        },
     )
     track_next_frame_vel = RewTerm(
         func=mdp.track_next_frame_vel,
-        weight=1.0,
+        weight=2.5,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
-        }
-    )
-    track_base_vel_next = RewTerm(
-        func=mdp.track_base_vel_next,
-        weight=1.0,
-        params={
-            "command_name": "motion_data",
-            "asset_cfg": SceneEntityCfg("robot"),
-        }
+        },
     )
     track_next_frame_ang_vel = RewTerm(
         func=mdp.track_next_frame_ang_vel,
@@ -275,23 +265,15 @@ class RewardsCfg:
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
-        }
-    )
-    track_base_ang_vel_next = RewTerm(
-        func=mdp.track_base_ang_vel_next,
-        weight=0.2,
-        params={
-            "command_name": "motion_data",
-            "asset_cfg": SceneEntityCfg("robot"),
-        }
+        },
     )
     track_next_frame_proj_grav = RewTerm(
         func=mdp.track_next_frame_proj_grav,
-        weight=3,
+        weight=1,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
-        }
+        },
     )
     track_base_height = RewTerm(
         func=mdp.track_base_height,
@@ -299,7 +281,8 @@ class RewardsCfg:
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
-        })
+        },
+    )
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.track_lin_vel_xy_exp, weight=0.0, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
     )
@@ -322,7 +305,7 @@ class RewardsCfg:
     # )
     feet_air_time = RewTerm(
         func=mdp.feet_air_time,
-        weight=0.125,
+        weight=0.5,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*FOOT"),
             "command_name": "joint_imitation",
@@ -339,7 +322,6 @@ class RewardsCfg:
     # flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=-2.5)
     # base_height_l2 = RewTerm(func=mdp.base_height_l2, weight=-2.5, params={"target_height": 0.6})
     dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=0.0)
-
 
 
 @configclass

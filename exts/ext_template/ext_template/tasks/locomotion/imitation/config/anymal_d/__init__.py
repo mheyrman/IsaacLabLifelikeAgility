@@ -12,7 +12,7 @@ gym.register(
     kwargs={
         "env_cfg_entry_point": imitate_env_cfg.AnymalDImitateEnvCfg,
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:AnymalDImitatePPORunnerCfg",
-    }
+    },
 )
 
 gym.register(

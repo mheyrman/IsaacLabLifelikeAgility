@@ -1,8 +1,8 @@
-from omni.isaac.lab.utils import configclass
-
 from ext_template.tasks.locomotion.imitation.imitation_env_cfg import LocomotionImitationEnvCfg
 
+from omni.isaac.lab.utils import configclass
 from omni.isaac.lab_assets.anymal import ANYMAL_D_CFG
+
 
 @configclass
 class AnymalDImitateEnvCfg(LocomotionImitationEnvCfg):

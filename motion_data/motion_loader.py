@@ -109,6 +109,10 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
             motion_keys.append(file)
             num += 1
 
+    default_joint_pos = entities["anymal_d"].data.default_joint_pos
+    print("POS")
+    print(default_joint_pos)
+
     data_num = 0
     while True:
         # get the motion data
@@ -179,6 +183,7 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
 
             # joint state
             joint_pos = joint_angles[:, :, count // 2]
+            joint_pos = joint_pos - default_joint_pos.to(joint_pos.device)
             joint_pos = joint_pos.unsqueeze(0)
             joint_vel = joint_vels[:, :, count // 2]
             joint_vel = joint_vel.unsqueeze(0)
@@ -196,7 +201,6 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
             count += 1
             # update buffers
             robot.update(sim_dt)
-
 
             # Uncomment to replay same imitation data
             # if count == 400:

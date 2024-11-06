@@ -250,7 +250,6 @@ class RewardsCfg:
     dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=0.0)
 
 
-
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""

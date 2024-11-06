@@ -19,7 +19,9 @@ parser.add_argument(
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
-parser.add_argument("--ghost", type=bool, default=False, help="Have a ghost robot showing the motion data next to robot 0")
+parser.add_argument(
+    "--ghost", type=bool, default=False, help="Have a ghost robot showing the motion data next to robot 0"
+)
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -49,6 +51,7 @@ from omni.isaac.lab.utils.dict import print_dict
 from omni.isaac.lab_tasks.utils import get_checkpoint_path, parse_env_cfg
 from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, export_policy_as_onnx
 
+
 def load_motion() -> torch.Tensor():
     """Loads motion data in motion_data path to replay concurrently"""
     motion_data = []
@@ -57,6 +60,7 @@ def load_motion() -> torch.Tensor():
         if file.endswith(".pt"):
             motion_data = torch.load(os.path.join("motion_data", file))
     return motion_data
+
 
 def main():
     """Play with RSL-RL agent."""
@@ -104,8 +108,8 @@ def main():
     policy = ppo_runner.get_inference_policy(device=env.unwrapped.device)
 
     # export policy to onnx
-    export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
-    export_policy_as_onnx(ppo_runner.alg.actor_critic, export_model_dir, filename="policy.onnx")
+    # export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
+    # export_policy_as_onnx(ppo_runner.alg.actor_critic, export_model_dir, filename="policy.onnx")
 
     # reset environment
     obs, _ = env.get_observations()
@@ -125,10 +129,18 @@ def main():
             # env stepping
             obs, _, _, _ = env.step(actions)
 
-
             if args_cli.ghost:
-                robot_pos = (env.unwrapped.scene["robot"].data.root_pos_w[0, 0].item(), env.unwrapped.scene["robot"].data.root_pos_w[0, 1].item(), env.unwrapped.scene["robot"].data.root_pos_w[0, 2].item())
-                robot_quat = (env.unwrapped.scene["robot"].data.root_quat_w[0, 0].item(), env.unwrapped.scene["robot"].data.root_quat_w[0, 1].item(), env.unwrapped.scene["robot"].data.root_quat_w[0, 2].item(), env.unwrapped.scene["robot"].data.root_quat_w[0, 3].item())
+                robot_pos = (
+                    env.unwrapped.scene["robot"].data.root_pos_w[0, 0].item(),
+                    env.unwrapped.scene["robot"].data.root_pos_w[0, 1].item(),
+                    env.unwrapped.scene["robot"].data.root_pos_w[0, 2].item(),
+                )
+                robot_quat = (
+                    env.unwrapped.scene["robot"].data.root_quat_w[0, 0].item(),
+                    env.unwrapped.scene["robot"].data.root_quat_w[0, 1].item(),
+                    env.unwrapped.scene["robot"].data.root_quat_w[0, 2].item(),
+                    env.unwrapped.scene["robot"].data.root_quat_w[0, 3].item(),
+                )
                 # ghost the robot
                 base_pos = motion_data[:, :, 0:3]  # base position in global frame
                 base_quat = motion_data[:, :, 3:7]  # base orientation quaternion in global frame
@@ -155,19 +167,21 @@ def main():
                 joint_vels = torch.zeros_like(joint_angles)  # joint positions don't seem to matter..?
 
                 data_length = joint_angles.shape[2]
-                
-                robots = env.unwrapped.scene["robot"]   # ghost is robot 1
-                root_state = robots.data.default_root_state.clone()    # [pos, quat, lin_vel, ang_vel]
+
+                robots = env.unwrapped.scene["robot"]  # ghost is robot 1
+                root_state = robots.data.default_root_state.clone()  # [pos, quat, lin_vel, ang_vel]
                 root_state[1, 0] = robot_pos[0] + 1.0
                 root_state[1, 1] = robot_pos[1] + 1.0
-                root_state[1, 2] = base_pos[:, motion_step  % data_length, 2]
+                root_state[1, 2] = base_pos[:, motion_step % data_length, 2] + 0.05
                 root_state[1, 3] = base_quat[:, motion_step % data_length, 2]
                 root_state[1, 4] = base_quat[:, motion_step % data_length, 1]
                 root_state[1, 5] = base_quat[:, motion_step % data_length, 0]
                 root_state[1, 6] = base_quat[:, motion_step % data_length, 3]
                 # print(root_state.shape)
-                robots.write_root_state_to_sim(root_state=root_state[1,...].unsqueeze(0), env_ids=torch.tensor([1]).to(env.unwrapped.device))
-                
+                robots.write_root_state_to_sim(
+                    root_state=root_state[1, ...].unsqueeze(0), env_ids=torch.tensor([1]).to(env.unwrapped.device)
+                )
+
                 # joint state
                 joint_pos = joint_angles[:, :, motion_step % data_length]
                 joint_pos = joint_pos.unsqueeze(0).to(env.unwrapped.device)
@@ -175,8 +189,10 @@ def main():
                 joint_vel = joint_vel.unsqueeze(0).to(env.unwrapped.device)
 
                 # write joint angle and velocity information to simulation
-                robots.write_joint_state_to_sim(position=joint_pos, velocity=joint_vel, env_ids=torch.tensor([1]).to(env.unwrapped.device))
-                
+                robots.write_joint_state_to_sim(
+                    position=joint_pos, velocity=joint_vel, env_ids=torch.tensor([1]).to(env.unwrapped.device)
+                )
+
                 motion_step += 1
 
             # print(env_cfg.scene.robot.data.root_pos_w[0].detach().cpu())

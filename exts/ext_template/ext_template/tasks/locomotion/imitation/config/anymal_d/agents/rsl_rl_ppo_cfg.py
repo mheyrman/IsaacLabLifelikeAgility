@@ -1,5 +1,5 @@
 from omni.isaac.lab.utils import configclass
-from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import (
+from ext_template.tasks.locomotion.imitation.config.rl_cfg import (
     RslRlOnPolicyRunnerCfg,
     RslRlPpoActorCriticCfg,
     RslRlPpoAlgorithmCfg,
@@ -9,8 +9,8 @@ from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import (
 @configclass
 class AnymalDImitatePPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 1000
-    save_interval = 500
+    max_iterations = 10000
+    save_interval = 1000
     experiment_name = "anymal_d_imitation"
     empirical_normalization = False
     policy = RslRlPpoActorCriticCfg(

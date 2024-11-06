@@ -9,6 +9,8 @@ from omni.isaac.lab.managers import CommandTermCfg
 from omni.isaac.lab.utils import configclass
 
 from .imitation_command import ImitationCommand
+
+
 @configclass
 class ImitationCommandCfg(CommandTermCfg):
     """Configuration for the imitation command generator."""
