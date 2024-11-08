@@ -123,6 +123,8 @@ class ImitationCommand(CommandTerm):
         self.motion_number = torch.randint(0, num_motions, (self.num_envs,), device=self.device)
 
         self.imitation_command = torch.zeros(self.num_envs, self.motion.shape[0], device=self.device)
+        self.custom_imitation_command = torch.zeros(self.num_envs, self.motion.shape[0], device=self.device)
+        self.custom_len = 0
         self.is_standing_env = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
         # -- metrics
@@ -170,20 +172,12 @@ class ImitationCommand(CommandTerm):
         Shape: (num_envs, 33) 24 joint commands, 3 velocity commands, 3 ang vel command, 3 proj grav command
         """
         # print(self.imitation_command.shape)
-
         if not isinstance(self.cfg.terms, list):
             return self.imitation_command
+        
+        self.update_custom_imitation_command()
 
-        return_command = []
-        for term in self.cfg.terms:
-            return_command.append(
-                self.imitation_command[
-                    :,
-                    self.indexing_dict[term + "_start"] : self.indexing_dict[term + "_start"]
-                    + self.indexing_dict[term + "_len"],
-                ]
-            )
-        return torch.cat(return_command, dim=1)
+        return self.custom_imitation_command
 
     """
     Implementation specific functions.
@@ -238,6 +232,9 @@ class ImitationCommand(CommandTerm):
         r = torch.empty(len(env_ids), device=self.device)
         self.is_standing_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_standing_envs
 
+        if isinstance(self.cfg.terms, list):
+            self.update_custom_imitation_command()
+
     def _update_command(self):
         """
         Post-process the imitation command.
@@ -246,7 +243,6 @@ class ImitationCommand(CommandTerm):
             torch.index_select(self.motion, 1, (self.motion_index // 1).type(torch.int32)), 0, 1
         )
         self.motion_index += 1.0
-        # if self.motion_index[env] >= self.start_indices[self.motion_number[env] + 1] then return to the start of the motion
         self.motion_index = torch.where(
             self.motion_index >= self.start_indices[self.motion_number + 1],
             self.start_indices[self.motion_number],
@@ -263,4 +259,27 @@ class ImitationCommand(CommandTerm):
         # update the command
         standing_env_ids = self.is_standing_env.nonzero(as_tuple=False).flatten()
         self.imitation_command[standing_env_ids, :] = cmd_tmp[standing_env_ids, :]
-        # print(f"Execution time: {end_time - start_time} seconds")
+
+        if isinstance(self.cfg.terms, list):
+            self.update_custom_imitation_command()
+    
+    def update_custom_imitation_command(self):
+        if self.custom_len == 0:
+            for term in self.cfg.terms:
+                self.custom_len = self.custom_len + self.indexing_dict[term + "_len"]
+
+        if self.custom_imitation_command.shape[1] != self.imitation_command.shape[1] + self.custom_len:
+            print("Reshaping custom command to fit inputs...")
+            self.custom_imitation_command = torch.zeros(self.num_envs, self.imitation_command.shape[1] + self.custom_len, device=self.device)
+
+        current_idx = self.imitation_command.shape[1]
+        self.custom_imitation_command[:, :current_idx] = self.imitation_command[...]
+        for term in self.cfg.terms:
+            term_start = self.indexing_dict[term + "_start"]
+            term_len = self.indexing_dict[term + "_len"]
+            
+            # Directly assign each slice from self.imitation_command into the correct location in self.custom_imitation_command
+            self.custom_imitation_command[:, current_idx : current_idx + term_len] = \
+                self.imitation_command[:, term_start : term_start + term_len]
+    
+            current_idx += term_len
