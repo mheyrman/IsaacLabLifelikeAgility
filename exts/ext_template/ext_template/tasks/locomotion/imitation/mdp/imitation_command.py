@@ -47,7 +47,7 @@ class ImitationCommand(CommandTerm):
         motion_indices = []
         num_motions = 0
         for file in os.listdir("motion_data"):
-            if file.endswith(".pt"):
+            if file.endswith(".pt") and not file.endswith("end_points.pt"):
                 motion_data = torch.load(os.path.join("motion_data", file))
 
                 joint_angles = torch.cat(
@@ -86,11 +86,34 @@ class ImitationCommand(CommandTerm):
                 # vel x, vel y, ang vel z
                 base_vel = torch.cat((motion_data[..., 7], motion_data[..., 8], motion_data[..., 9]))
                 # base_vel_next is the next frame's base velocity
-                base_vel_next = torch.cat([base_vel[:, 1:], base_vel[:, -1:]], dim=1)
                 base_ang_vel = torch.cat((motion_data[..., 10], motion_data[..., 11], motion_data[..., 12]))
-                base_ang_vel_next = torch.cat([base_ang_vel[:, 1:], base_ang_vel[:, -1:]], dim=1)
                 base_proj_grav = torch.cat((motion_data[..., 13], motion_data[..., 14], motion_data[..., 15]))
                 base_height = motion_data[..., 2] + 0.1
+                # base_vel_next = torch.cat([base_vel[:, 1:], base_vel[:, -1:]], dim=1)
+                # base_ang_vel_next = torch.cat([base_ang_vel[:, 1:], base_ang_vel[:, -1:]], dim=1)
+                # joint_angles_next = torch.cat([joint_angles[:, 1:], joint_angles[:, -1:]], dim=1)
+                # joint_angles_nnext = torch.cat([joint_angles_next[:, 1:], joint_angles_next[:, -1:]], dim=1)
+
+                # end points
+                end_point_data = torch.load(os.path.join("motion_data", file[:-3] + "_end_points.pt")).to(motion_data.device)
+                end_points = torch.cat(
+                    (
+                        end_point_data[..., 0],
+                        end_point_data[..., 1],
+                        end_point_data[..., 2],
+                        end_point_data[..., 3],
+                        end_point_data[..., 4],
+                        end_point_data[..., 5],
+                        end_point_data[..., 6],
+                        end_point_data[..., 7],
+                        end_point_data[..., 8],
+                        end_point_data[..., 9],
+                        end_point_data[..., 10],
+                        end_point_data[..., 11],
+                    )
+                )
+                end_points_next = torch.cat([end_points[:, 1:], end_points[:, -1:]], dim=1)
+                end_points_nnext = torch.cat([end_points_next[:, 1:], end_points_next[:, -1:]], dim=1)
 
                 # motion_data (34, n)
                 motion_data = torch.cat(
@@ -101,8 +124,13 @@ class ImitationCommand(CommandTerm):
                         base_ang_vel,
                         base_proj_grav,
                         base_height,
-                        base_vel_next,
-                        base_ang_vel_next,
+                        # base_vel_next,
+                        # base_ang_vel_next,
+                        # joint_angles_next,
+                        # joint_angles_nnext,
+                        end_points,
+                        end_points_next,
+                        end_points_nnext,
                     ),
                     dim=0,
                 )
@@ -147,11 +175,21 @@ class ImitationCommand(CommandTerm):
             "base_proj_grav_start": 30,
             "base_proj_grav_len": 3,
             "base_height_start": 33,
-            "base_height_len": 1,
-            "base_vel_next_start": 34,
-            "base_vel_next_len": 3,
-            "base_ang_vel_next_start": 37,
-            "base_ang_vel_next_len": 3,
+            "base_height_len": 1,               # do not touch this or above
+            # "base_vel_next_start": 34,
+            # "base_vel_next_len": 3,
+            # "base_ang_vel_next_start": 37,
+            # "base_ang_vel_next_len": 3,
+            # "joint_angles_next_start": 40,
+            # "joint_angles_next_len": 12,
+            # "joint_angles_nnext_start": 52,
+            # "joint_angles_nnext_len": 12,
+            "end_points_start": 34,
+            "end_points_len": 12,
+            "end_points_next_start": 46,
+            "end_points_next_len": 12,
+            "end_points_nnext_start": 58,
+            "end_points_nnext_len": 12,
         }
 
     def __str__(self) -> str:
@@ -216,16 +254,12 @@ class ImitationCommand(CommandTerm):
         This function is called when the command needs to be resampled.
         """
 
-        # change the motion sometimes
-        # if torch.rand(1) < 5e-3:
-        # print("Resampled")
         self.motion_number[env_ids] = torch.randint(0, len(self.start_indices) - 1, (len(env_ids),), device=self.device)
-        # print(self.motion_number[env_ids])
-        # make motion_index the index in self.start_indices where the motion starts
         self.motion_index[env_ids] = self.start_indices[self.motion_number[env_ids]].float()
         self.imitation_command[env_ids] = torch.transpose(
             torch.index_select(self.motion, 1, (self.motion_index[env_ids] // 1).type(torch.int32)), 0, 1
         )
+
         self.motion_index[env_ids] += 1.0
 
         # update standing envs

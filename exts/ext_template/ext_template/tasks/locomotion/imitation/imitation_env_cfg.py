@@ -101,43 +101,28 @@ class CommandsCfg:
         ),
     )
 
-    # TODO:
-    # joint_imitation and motion_data are sampled as separate commands, so are not at the same
-    # index. Need to create a custom function instead of mdp.generated_commands in PolicyCfg(ObsGroup)
-    # below to handle this.
-    # Current idea:
-    # Append custom command stuff to the end of the default command stuff, that way reward information
-    # keeps the same index, while I need a way to specify to only send the custom queried commands to the
-    # observations.
-    # Since a custom get_command() function will be made, can specify a flag that sends only custom 
-    # commands to the observations.
-    # TODO:
-    # Move the custom command resampling to command_resampling to clean that part up so that it's not 
-    # reassigned each time the command is called (save memory).
-
     # Custom imitation command configuration
-    #         terms=["joint_angles", "base_vel", "base_ang_vel"],
+    #         terms=["joint_angles", "base_vel", "base_ang_vel", ...],
     motion_data = ImitationCommandCfg(
         asset_name="robot",
         resampling_time_range=(5.0, 5.0),
         rel_standing_envs=0.02,
         terms=[
-            "joint_angles",
+            # "joint_angles",
+            # "joint_angles_next",
+            # "joint_angles_nnext",
             # "joint_velocities",
             # "base_vel",
             # "base_ang_vel",
+            "end_points",
+            "end_points_next",
+            "end_points_nnext",
             "base_proj_grav",
             "base_height",
             # "base_vel_next",
             # "base_ang_vel_next"
         ],
     )
-
-    # motion_data = ImitationCommandCfg(
-    #     asset_name="robot",
-    #     resampling_time_range=(5.0, 5.0),
-    #     rel_standing_envs=0.02,
-    # )
 
 
 @configclass
@@ -156,12 +141,11 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        # motion_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "joint_imitation"})
         motion_commands = ObsTerm(
             func=mdp.generated_imitation_commands,
             params={
                 "command_name": "motion_data",
-                "num_ref_motion": 40,
+                "num_ref_motion": 70,
                 "custom_motion": True,
             }
         )
@@ -292,7 +276,7 @@ class RewardsCfg:
     )
     track_next_frame_ang_vel = RewTerm(
         func=mdp.track_next_frame_ang_vel,
-        weight=0.5,
+        weight=1.5,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
@@ -300,7 +284,7 @@ class RewardsCfg:
     )
     track_next_frame_proj_grav = RewTerm(
         func=mdp.track_next_frame_proj_grav,
-        weight=1,
+        weight=2.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),

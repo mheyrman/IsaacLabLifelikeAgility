@@ -118,6 +118,8 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
         # get the motion data
         motion_data = motion_dict[motion_keys[data_num]]
         print("motion_key: " + str(motion_keys[data_num]))
+        print(motion_data.shape)
+        motion_len = motion_data.shape[1]
         # split data into components
         base_pos = motion_data[:, :, 0:3]  # base position in global frame
         base_quat = motion_data[:, :, 3:7]  # base orientation quaternion in global frame
@@ -158,13 +160,17 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
 
         joint_vels = torch.zeros_like(joint_angles)  # joint positions don't seem to matter..?
 
+        """Record end point information."""
+        rec = True
+        end_points = []
+
         """Runs the simulation loop."""
         # Define simulation stepping
         sim_dt = sim.get_physics_dt()  # 0.01s
         sim_time = 0.0
         count = 0
         # Simulate physics
-        while simulation_app.is_running() and count < 400:
+        while simulation_app.is_running() and count // 2 < motion_len:
             # reset
             robot = entities["anymal_d"]
 
@@ -173,12 +179,21 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
 
             # root state
             root_state = robot.data.default_root_state.clone()
-            root_state[:, :3] = origins[0]
-            root_state[:, 2] = base_pos[:, count // 2, 2]
-            root_state[:, 4:7] = 0.0
-            root_state[:, 3] = 1.0
-            root_state[:, 3:7] = base_quat[:, count // 2, :]
-            root_state[:, 7:] = 0.0
+            if not rec:
+                root_state[:, :3] = origins[0] + 0.05
+                root_state[:, 2] = base_pos[:, count // 2, 2]
+                root_state[:, 4:7] = 0.0
+                root_state[:, 3] = 1.0
+                root_state[:, 3] = base_quat[:, count // 2, 2]
+                root_state[:, 4] = base_quat[:, count // 2, 1]
+                root_state[:, 5] = base_quat[:, count // 2, 0]
+                root_state[:, 6] = base_quat[:, count // 2, 3]
+                root_state[:, 7:] = 0.0
+            else:
+                root_state[:, :3] = 0.0
+                root_state[:, 4:7] = 0.0
+                root_state[:, 3] = 1.0
+                root_state[:, 7:] = 0.0
             robot.write_root_state_to_sim(root_state)
 
             # joint state
@@ -191,6 +206,10 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
             # write joint angle and velocity information to simulation
             robot.write_joint_state_to_sim(joint_pos, joint_vel)
 
+            if rec and count % 2 == 0:
+                foot_positions = robot.data.body_state_w[:, 13:, :3].reshape(1, -1).unsqueeze(0)
+                end_points.append(foot_positions)
+
             # reset the internal state
             robot.reset()
 
@@ -202,11 +221,13 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
             # update buffers
             robot.update(sim_dt)
 
-            # Uncomment to replay same imitation data
-            # if count == 400:
-            #     count = 0
-            #     print("RESETTING IMITATION")
-
+        if rec:
+            end_points = torch.cat(end_points, dim=1)
+            # print(motion_keys[data_num])
+            # print("End points shape: ", end_points.shape)
+            # print("End points: ", end_points)
+            torch.save(end_points, motion_keys[data_num][:-3] + "_end_points.pt")
+            rec = False
         data_num = (data_num + 1) if data_num < (num - 1) else 0
 
 
