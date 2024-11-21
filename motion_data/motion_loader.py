@@ -223,11 +223,8 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
 
         if rec:
             end_points = torch.cat(end_points, dim=1)
-            # print(motion_keys[data_num])
-            # print("End points shape: ", end_points.shape)
-            # print("End points: ", end_points)
             torch.save(end_points, motion_keys[data_num][:-3] + "_end_points.pt")
-            rec = False
+
         data_num = (data_num + 1) if data_num < (num - 1) else 0
 
 

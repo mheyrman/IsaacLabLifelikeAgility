@@ -36,6 +36,8 @@ if args_cli.video:
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+args_cli.task = "Isaac-Imitate-Anymal-D-v0"
+
 """Rest everything follows."""
 
 import gymnasium as gym

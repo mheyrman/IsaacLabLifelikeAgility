@@ -88,18 +88,18 @@ class MySceneCfg(InteractiveSceneCfg):
 @configclass
 class CommandsCfg:
     """Command specifications for the MDP."""
-    base_velocity = mdp.UniformVelocityCommandCfg(
-        asset_name="robot",
-        resampling_time_range=(10.0, 10.0),
-        rel_standing_envs=0.02,
-        rel_heading_envs=1.0,
-        heading_command=True,
-        heading_control_stiffness=0.5,
-        debug_vis=False,
-        ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-0.0, 0.0), lin_vel_y=(-0.0, 0.0), ang_vel_z=(-0.0, 0.0), heading=(-0.0, 0.0)
-        ),
-    )
+    # base_velocity = mdp.UniformVelocityCommandCfg(
+    #     asset_name="robot",
+    #     resampling_time_range=(10.0, 10.0),
+    #     rel_standing_envs=0.02,
+    #     rel_heading_envs=1.0,
+    #     heading_command=True,
+    #     heading_control_stiffness=0.5,
+    #     debug_vis=False,
+    #     ranges=mdp.UniformVelocityCommandCfg.Ranges(
+    #         lin_vel_x=(-0.0, 0.0), lin_vel_y=(-0.0, 0.0), ang_vel_z=(-0.0, 0.0), heading=(-0.0, 0.0)
+    #     ),
+    # )
 
     # Custom imitation command configuration
     #         terms=["joint_angles", "base_vel", "base_ang_vel", ...],
@@ -115,8 +115,8 @@ class CommandsCfg:
             # "base_vel",
             # "base_ang_vel",
             "end_points",
-            "end_points_next",
-            "end_points_nnext",
+            # "end_points_next",
+            # "end_points_nnext",
             "base_proj_grav",
             "base_height",
             # "base_vel_next",
@@ -145,8 +145,9 @@ class ObservationsCfg:
             func=mdp.generated_imitation_commands,
             params={
                 "command_name": "motion_data",
-                "num_ref_motion": 70,
+                "num_ref_motion": 46,
                 "custom_motion": True,
+                "noise": True,
             }
         )
         base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))
@@ -250,22 +251,30 @@ class RewardsCfg:
     """Reward terms for the MDP."""
 
     # -- task
+    track_next_frame_feet = RewTerm(
+        func=mdp.track_next_frame_feet,
+        weight=1.5,
+        params={
+            "command_name": "motion_data",
+            "asset_cfg": SceneEntityCfg("robot"),
+        },
+    )
     track_next_frame_joint = RewTerm(
         func=mdp.track_next_frame_joint,
-        weight=0.5,
+        weight=2.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
         },
     )
-    track_next_frame_joint_vel = RewTerm(
-        func=mdp.track_next_frame_joint_vel,
-        weight=1.0,
-        params={
-            "command_name": "motion_data",
-            "asset_cfg": SceneEntityCfg("robot"),
-        },
-    )
+    # track_next_frame_joint_vel = RewTerm(
+    #     func=mdp.track_next_frame_joint_vel,
+    #     weight=1.5,
+    #     params={
+    #         "command_name": "motion_data",
+    #         "asset_cfg": SceneEntityCfg("robot"),
+    #     },
+    # )
     track_next_frame_vel = RewTerm(
         func=mdp.track_next_frame_vel,
         weight=2.5,
@@ -276,7 +285,7 @@ class RewardsCfg:
     )
     track_next_frame_ang_vel = RewTerm(
         func=mdp.track_next_frame_ang_vel,
-        weight=1.5,
+        weight=2.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
@@ -284,7 +293,7 @@ class RewardsCfg:
     )
     track_next_frame_proj_grav = RewTerm(
         func=mdp.track_next_frame_proj_grav,
-        weight=2.0,
+        weight=1.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
@@ -292,18 +301,18 @@ class RewardsCfg:
     )
     track_base_height = RewTerm(
         func=mdp.track_base_height,
-        weight=0.5,
+        weight=1.0,
         params={
             "command_name": "motion_data",
             "asset_cfg": SceneEntityCfg("robot"),
         },
     )
-    track_lin_vel_xy_exp = RewTerm(
-        func=mdp.track_lin_vel_xy_exp, weight=0.0, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
-    )
-    track_ang_vel_z_exp = RewTerm(
-        func=mdp.track_ang_vel_z_exp, weight=0.0, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
-    )
+    # track_lin_vel_xy_exp = RewTerm(
+    #     func=mdp.track_lin_vel_xy_exp, weight=0.0, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+    # )
+    # track_ang_vel_z_exp = RewTerm(
+    #     func=mdp.track_ang_vel_z_exp, weight=0.0, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+    # )
     # -- penalties
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)

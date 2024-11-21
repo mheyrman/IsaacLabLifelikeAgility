@@ -38,6 +38,24 @@ def feet_air_time(
     # reward *= torch.norm(mdp.generated_imitation_commands(env=env, command_name)[:, :2], dim=1) > 0.1
     return reward
 
+def track_next_frame_feet(
+        env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """L2 reward for tracking foot position relative to base"""
+    asset: Articulation = env.scene[asset_cfg.name]
+    # TODO: get foot position in body frame, will probably require transformation from world to body frame
+    root_pos_w = asset.data.root_pos_w.unsqueeze(1)     # should return [4096, 1, 3]
+    foot_pos_w = asset.data.body_state_w[:, 13:, :3]    # should return [4096, 4, 3]
+
+    # subtract the 2nd dim of root_pos_w from foot_pos_w
+    foot_pos_b = foot_pos_w - root_pos_w
+    foot_pos_b = foot_pos_b.reshape(-1, 12)
+
+    foot_pos_command = mdp.generated_imitation_commands(env=env, command_name=command_name, custom_motion=True)[..., :12]
+    reward = -torch.norm(foot_pos_command - foot_pos_b, dim=1) / 2.0
+
+    return torch.exp(reward)
+
 
 def track_next_frame_vel(
     env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
@@ -45,15 +63,12 @@ def track_next_frame_vel(
     """Simple L2 reward for tracking next frame motion"""
     asset: Articulation = env.scene[asset_cfg.name]
     current_motion = asset.data.root_lin_vel_b
+
     # get next motion command
-    r_min = -2.0
-    r_max = 1.0
     next_vel_command = mdp.generated_imitation_commands(env=env, command_name=command_name)[..., 24:27]
     reward = -torch.norm((next_vel_command - current_motion), dim=1) / 0.75
-    # print("desired vel: ", next_vel_command)
-    # print("current vel: ", current_motion)
+
     return torch.exp(reward)
-    # return r_min + (r_max - r_min) * torch.exp(reward)
 
 def track_next_frame_ang_vel(
     env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
@@ -61,13 +76,12 @@ def track_next_frame_ang_vel(
     """Simple L2 reward for tracking next frame motion"""
     asset: Articulation = env.scene[asset_cfg.name]
     current_motion = asset.data.root_ang_vel_b
+
     # get next motion command
-    r_min = -1.0
-    r_max = 1.0
     next_ang_vel_command = mdp.generated_imitation_commands(env=env, command_name=command_name)[..., 27:30]
     reward = -torch.norm(next_ang_vel_command - current_motion, dim=1) / 0.25
+
     return torch.exp(reward)
-    # return r_min + (r_max - r_min) * torch.exp(reward)
 
 
 def track_next_frame_proj_grav(
@@ -76,6 +90,7 @@ def track_next_frame_proj_grav(
     """Simple L2 reward for tracking next frame motion"""
     asset: Articulation = env.scene[asset_cfg.name]
     current_motion = asset.data.projected_gravity_b
+
     # get next motion command
     next_proj_grav_command = mdp.generated_imitation_commands(env=env, command_name=command_name)[..., 30:33]
     reward = -torch.sum(torch.square(next_proj_grav_command - current_motion), dim=1) / 0.01
@@ -89,14 +104,11 @@ def track_next_frame_joint(
     """Simple L2 reward for tracking next frame motion"""
     asset: Articulation = env.scene[asset_cfg.name]
     current_motion = asset.data.joint_pos[:, asset_cfg.joint_ids]
+
     # get next motion command
     next_joint_command = mdp.generated_imitation_commands(env=env, command_name=command_name)[..., :12]
-    # compute the difference between the current and the next frame motion
-    # try using a gaussian reward w/ negative offset r = r_min + (r_max - r_min) * exp(a||x-y||^2)
-    # r_min = -1.0
-    # r_max = 1.0
     reward = -torch.sum(torch.square(next_joint_command - current_motion), dim=1) / 0.5
-    # return torch.exp(reward)
+
     return torch.exp(reward)
 
 
@@ -106,10 +118,12 @@ def track_next_frame_joint_vel(
     """Simple L2 reward for tracking next frame motion"""
     asset: Articulation = env.scene[asset_cfg.name]
     current_motion = asset.data.joint_vel[:, asset_cfg.joint_ids]
+
     # get next motion command
     next_joint_vel_command = mdp.generated_imitation_commands(env=env, command_name=command_name)[..., 12:24]
     # compute the difference between the current and the next frame motion
-    reward = -torch.norm(next_joint_vel_command - current_motion, dim=1) / 0.25
+    reward = -torch.norm(next_joint_vel_command - current_motion, dim=1) / 0.75
+
     return torch.exp(reward)
 
 
@@ -119,27 +133,9 @@ def track_base_height(
     """Simple L2 reward for tracking next frame motion"""
     asset: Articulation = env.scene[asset_cfg.name]
     current_motion = asset.data.root_pos_w[..., 2]
+    
     # get next motion command
     next_base_height_command = mdp.generated_imitation_commands(env=env, command_name=command_name)[..., 33]
     reward = -torch.square(next_base_height_command - current_motion) / 0.1
 
     return torch.exp(reward)
-
-# def check_cmds(env: ManagerBasedRLEnv, command1_name: str, command2_name: str) -> torch.Tensor:
-#     """Simple L2 reward for tracking next frame motion"""
-#     # get next motion command
-#     cmd1 = mdp.generated_imitation_commands(env=env, command1_name)
-#     cmd2 = mdp.generated_imitation_commands(env=env, command2_name)
-
-#     # compare the two
-#     print("Imitation:")
-#     print(cmd1.shape)
-#     print(cmd1[0])
-#     print("Ground Truth:")
-#     print(cmd2.shape)
-#     print(cmd2[0])
-#     print(torch.allclose(cmd1, cmd2))
-#     if torch.allclose(cmd1, cmd2):
-#         return 1.0
-#     else:
-#         return 0.0

@@ -57,7 +57,7 @@ def load_motion() -> torch.Tensor():
     motion_data = []
     # only works with 1 motion file
     for file in os.listdir("motion_data"):
-        if file.endswith(".pt"):
+        if file.endswith(".pt") and not file.endswith("end_points.pt"):
             motion_data = torch.load(os.path.join("motion_data", file))
     return motion_data
 
@@ -173,10 +173,14 @@ def main():
                 root_state[1, 0] = robot_pos[0] + 1.0
                 root_state[1, 1] = robot_pos[1] + 1.0
                 root_state[1, 2] = base_pos[:, motion_step % data_length, 2] + 0.05
-                root_state[1, 3] = base_quat[:, motion_step % data_length, 2]
-                root_state[1, 4] = base_quat[:, motion_step % data_length, 1]
-                root_state[1, 5] = base_quat[:, motion_step % data_length, 0]
-                root_state[1, 6] = base_quat[:, motion_step % data_length, 3]
+                # root_state[1, 3] = base_quat[:, motion_step % data_length, 2]
+                # root_state[1, 4] = base_quat[:, motion_step % data_length, 1]
+                # root_state[1, 5] = base_quat[:, motion_step % data_length, 0]
+                # root_state[1, 6] = base_quat[:, motion_step % data_length, 3]
+                root_state[1, 3] = robot_quat[0]
+                root_state[1, 4] = robot_quat[1]
+                root_state[1, 5] = robot_quat[2]
+                root_state[1, 6] = robot_quat[3]
                 # print(root_state.shape)
                 robots.write_root_state_to_sim(
                     root_state=root_state[1, ...].unsqueeze(0), env_ids=torch.tensor([1]).to(env.unwrapped.device)

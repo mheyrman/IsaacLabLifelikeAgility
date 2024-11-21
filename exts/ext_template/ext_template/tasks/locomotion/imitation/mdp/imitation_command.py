@@ -21,6 +21,7 @@ from omni.isaac.lab.managers.manager_term_cfg import CommandTermCfg
 from omni.isaac.lab.markers import VisualizationMarkers
 from omni.isaac.lab.utils.math import combine_frame_transforms, compute_pose_error, quat_from_euler_xyz, quat_unique
 
+
 if TYPE_CHECKING:
     from omni.isaac.lab.envs import ManagerBasedEnv
 
@@ -39,6 +40,9 @@ class ImitationCommand(CommandTerm):
 
     def __init__(self, cfg: CommandTermCfg, env: ManagerBasedRLEnv):
         super().__init__(cfg, env)
+
+        self.cfg = cfg
+        self.env = env
 
         self.robot: Articulation = env.scene[cfg.asset_name]
 
@@ -85,14 +89,9 @@ class ImitationCommand(CommandTerm):
 
                 # vel x, vel y, ang vel z
                 base_vel = torch.cat((motion_data[..., 7], motion_data[..., 8], motion_data[..., 9]))
-                # base_vel_next is the next frame's base velocity
                 base_ang_vel = torch.cat((motion_data[..., 10], motion_data[..., 11], motion_data[..., 12]))
                 base_proj_grav = torch.cat((motion_data[..., 13], motion_data[..., 14], motion_data[..., 15]))
                 base_height = motion_data[..., 2] + 0.1
-                # base_vel_next = torch.cat([base_vel[:, 1:], base_vel[:, -1:]], dim=1)
-                # base_ang_vel_next = torch.cat([base_ang_vel[:, 1:], base_ang_vel[:, -1:]], dim=1)
-                # joint_angles_next = torch.cat([joint_angles[:, 1:], joint_angles[:, -1:]], dim=1)
-                # joint_angles_nnext = torch.cat([joint_angles_next[:, 1:], joint_angles_next[:, -1:]], dim=1)
 
                 # end points
                 end_point_data = torch.load(os.path.join("motion_data", file[:-3] + "_end_points.pt")).to(motion_data.device)
@@ -112,10 +111,9 @@ class ImitationCommand(CommandTerm):
                         end_point_data[..., 11],
                     )
                 )
-                end_points_next = torch.cat([end_points[:, 1:], end_points[:, -1:]], dim=1)
-                end_points_nnext = torch.cat([end_points_next[:, 1:], end_points_next[:, -1:]], dim=1)
+                # end_points_next = torch.cat([end_points[:, 1:], end_points[:, -1:]], dim=1)
+                # end_points_nnext = torch.cat([end_points_next[:, 1:], end_points_next[:, -1:]], dim=1)
 
-                # motion_data (34, n)
                 motion_data = torch.cat(
                     (
                         joint_angles,
@@ -124,13 +122,9 @@ class ImitationCommand(CommandTerm):
                         base_ang_vel,
                         base_proj_grav,
                         base_height,
-                        # base_vel_next,
-                        # base_ang_vel_next,
-                        # joint_angles_next,
-                        # joint_angles_nnext,
                         end_points,
-                        end_points_next,
-                        end_points_nnext,
+                        # end_points_next,
+                        # end_points_nnext,
                     ),
                     dim=0,
                 )
@@ -149,13 +143,21 @@ class ImitationCommand(CommandTerm):
         self.start_indices = torch.tensor(motion_indices, device=self.device)
         self.motion_index = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device)
         self.motion_number = torch.randint(0, num_motions, (self.num_envs,), device=self.device)
-
         self.imitation_command = torch.zeros(self.num_envs, self.motion.shape[0], device=self.device)
         self.custom_imitation_command = torch.zeros(self.num_envs, self.motion.shape[0], device=self.device)
         self.custom_len = 0
         self.is_standing_env = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
+        # -- history buffer
+        self.hist_len = 25
+        # self.num_prop_obs = 45
+        self.history_buffer = torch.zeros(
+            # self.num_envs, self.hist_len, self.num_prop_obs + self.custom_len, device=self.device
+            self.num_envs, self.hist_len, self.custom_len, device=self.device
+        )
+
         # -- metrics
+        self.metrics["error_foot_pos"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["error_joint_pos"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["error_joint_vel"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["error_base_vel"] = torch.zeros(self.num_envs, device=self.device)
@@ -209,13 +211,17 @@ class ImitationCommand(CommandTerm):
 
         Shape: (num_envs, 33) 24 joint commands, 3 velocity commands, 3 ang vel command, 3 proj grav command
         """
-        # print(self.imitation_command.shape)
+        return_cmd = None
         if not isinstance(self.cfg.terms, list):
-            return self.imitation_command
-        
-        self.update_custom_imitation_command()
+            return_cmd = self.imitation_command
+        else:
+            self.update_custom_imitation_command()
+            # return_cmd = self.custom_imitation_command
+            imitation_terms = self.custom_imitation_command[:, :self.imitation_command.shape[1]]
+            flattened_buffer = self.history_buffer.reshape(self.num_envs, -1)
+            return_cmd = torch.cat((imitation_terms, flattened_buffer), dim=1)
 
-        return self.custom_imitation_command
+        return return_cmd
 
     """
     Implementation specific functions.
@@ -225,8 +231,14 @@ class ImitationCommand(CommandTerm):
         # time when executed
         max_command_time = self.cfg.resampling_time_range[1]
         max_command_step = max_command_time / self._env.step_dt
+        
+        root_pos = self.robot.data.root_pos_w.unsqueeze(1)
+        foot_pos = self.robot.data.body_state_w[:, 13:, :3] - root_pos
 
         # log data
+        self.metrics["error_foot_pos"] += (
+            torch.norm(self.imitation_command[..., 34:46] - foot_pos.reshape(-1, 12), dim=1) / max_command_step
+        )
         self.metrics["error_joint_pos"] += (
             torch.norm(self.imitation_command[..., :12] - self.robot.data.joint_pos, dim=1) / max_command_step
         )
@@ -246,12 +258,18 @@ class ImitationCommand(CommandTerm):
         self.metrics["error_base_height"] += (
             torch.square(self.imitation_command[..., 33] - self.robot.data.root_pos_w[..., 2]) / max_command_step
         )
+        # for metric in self.metrics:
+        #     print(f"{metric}: {self.metrics[metric].mean().item()}")
+
+    """
+    Updating the command
+    """
 
     def _resample_command(self, env_ids: Sequence[int]):
         """
         Resample the imitation command.
 
-        This function is called when the command needs to be resampled.
+        This function is called when the command needs to be resampled/reset.
         """
 
         self.motion_number[env_ids] = torch.randint(0, len(self.start_indices) - 1, (len(env_ids),), device=self.device)
@@ -262,6 +280,9 @@ class ImitationCommand(CommandTerm):
 
         self.motion_index[env_ids] += 1.0
 
+        # reset history buffer
+        # self.history_buffer[env_ids] = torch.zeros(self.hist_len, self.num_prop_obs + self.custom_len, device=self.device)
+        self.history_buffer[env_ids] = torch.zeros(self.hist_len, self.custom_len, device=self.device)
         # update standing envs
         r = torch.empty(len(env_ids), device=self.device)
         self.is_standing_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_standing_envs
@@ -298,6 +319,9 @@ class ImitationCommand(CommandTerm):
             self.update_custom_imitation_command()
     
     def update_custom_imitation_command(self):
+        """
+        For custom imitation command indexing.
+        """
         if self.custom_len == 0:
             for term in self.cfg.terms:
                 self.custom_len = self.custom_len + self.indexing_dict[term + "_len"]
@@ -305,6 +329,17 @@ class ImitationCommand(CommandTerm):
         if self.custom_imitation_command.shape[1] != self.imitation_command.shape[1] + self.custom_len:
             print("Reshaping custom command to fit inputs...")
             self.custom_imitation_command = torch.zeros(self.num_envs, self.imitation_command.shape[1] + self.custom_len, device=self.device)
+
+        # if self.history_buffer.shape[2] != self.num_prop_obs + self.custom_len:
+        #     print("Reshaping history buffer to fit inputs...")
+        #     self.history_buffer = torch.zeros(
+        #         self.num_envs, self.hist_len, self.num_prop_obs + self.custom_len, device=self.device
+        #     )
+        if self.history_buffer.shape[2] != self.custom_len:
+            print("Reshaping history buffer to fit inputs...")
+            self.history_buffer = torch.zeros(
+                self.num_envs, self.hist_len, self.custom_len, device=self.device
+            )
 
         current_idx = self.imitation_command.shape[1]
         self.custom_imitation_command[:, :current_idx] = self.imitation_command[...]
@@ -317,3 +352,56 @@ class ImitationCommand(CommandTerm):
                 self.imitation_command[:, term_start : term_start + term_len]
     
             current_idx += term_len
+
+        # n_min = -0.1
+        # n_max = 0.1
+        # noise = torch.rand_like(self.custom_imitation_command[:, self.imitation_command.shape[1]:]) * (n_max - n_min) + n_min
+        # self.custom_imitation_command[:, self.imitation_command.shape[1]:] = self.custom_imitation_command[:, self.imitation_command.shape[1]:] + noise
+
+        self.update_history()
+
+    def update_history(self):
+        """
+        Update the history buffer.
+
+        Only contains observation terms, need to append other obs terms at another phase.
+        """
+        # cur_prop_cmds = self.get_prop_commands()
+        cur_im_cmds = self.custom_imitation_command[:, self.imitation_command.shape[1]:]
+
+        # cur_cmd = torch.cat((cur_prop_cmds, cur_im_cmds), dim=1)
+        cur_cmd = cur_im_cmds
+
+        prev_cmds = self.history_buffer[:, 1:, :]
+        # print(cur_cmd.shape)
+        # print(prev_cmds.shape)
+
+        self.history_buffer = torch.cat((prev_cmds, cur_cmd.unsqueeze(1)), dim=1)
+
+    # def get_prop_commands(self) -> torch.Tensor:
+    #     """
+    #     Get proprioceptive commands.
+    #     """
+    #     base_lin_vel = self.robot.data.root_pos_w
+    #     base_lin_vel_n = torch.rand_like(base_lin_vel) * (2 * 0.1) - 0.1
+    #     base_lin_vel = base_lin_vel + base_lin_vel_n
+    #     base_ang_vel = self.robot.data.root_ang_vel_b
+    #     base_ang_vel_n = torch.rand_like(base_ang_vel) * (2 * 0.2) - 0.2
+    #     base_ang_vel = base_ang_vel + base_ang_vel_n
+    #     base_proj_grav = self.robot.data.projected_gravity_b
+    #     base_proj_grav_n = torch.rand_like(base_proj_grav) * (2 * 0.05) - 0.05
+    #     base_proj_grav = base_proj_grav + base_proj_grav_n
+    #     joint_pos = self.robot.data.joint_pos - self.robot.data.default_joint_pos
+    #     joint_pos_n = torch.rand_like(joint_pos) * (2 * 0.01) - 0.01
+    #     joint_pos = joint_pos + joint_pos_n
+    #     joint_vel = self.robot.data.joint_vel - self.robot.data.default_joint_vel
+    #     joint_vel_n = torch.rand_like(joint_vel) * (2 * 1.5) - 1.5
+    #     joint_vel = joint_vel + joint_vel_n
+    #     actions = self.env.action_manager.action
+
+    #     # concat into a single tensor with shape (num_envs, 45)
+    #     prop_commands = torch.cat(
+    #         (joint_pos, joint_vel, base_lin_vel, base_ang_vel, base_proj_grav, actions), dim=1
+    #     ).to(self.device)
+
+    #     return prop_commands
