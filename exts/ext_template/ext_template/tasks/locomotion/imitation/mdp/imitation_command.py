@@ -149,7 +149,7 @@ class ImitationCommand(CommandTerm):
         self.is_standing_env = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
         # -- history buffer
-        self.hist_len = 25
+        self.hist_len = self.cfg.history_horizon if isinstance(self.cfg.history_horizon, int) else 0
         # self.num_prop_obs = 45
         self.history_buffer = torch.zeros(
             # self.num_envs, self.hist_len, self.num_prop_obs + self.custom_len, device=self.device

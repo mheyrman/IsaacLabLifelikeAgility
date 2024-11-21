@@ -9,15 +9,6 @@
 
 import argparse
 import multiprocessing
-
-from rsl_rl.runners import OnPolicyRunner
-
-# Import extensions to set up environment tasks
-import ext_template.tasks  # noqa: F401
-
-from omni.isaac.lab.utils.dict import print_dict
-from omni.isaac.lab_tasks.utils import get_checkpoint_path, parse_env_cfg
-from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, export_policy_as_onnx
 from omni.isaac.lab.app import AppLauncher
 
 # local imports
@@ -29,7 +20,6 @@ parser = argparse.ArgumentParser(description="Finetune an RL agent with RSL-RL."
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during finetuning.")
 parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
 parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
-parser.add_argument("--cpu", action="store_true", default=False, help="Use CPU pipeline.")
 parser.add_argument(
     "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
 )
@@ -45,10 +35,10 @@ args_cli = parser.parse_args()
 
 # overwrite args for cluster training
 args_cli.headless = True
-args_cli.task = "Isaac-Velocity-Flat-Anymal-D-Finetune-v0"
-args_cli.load_run = "2024-09-23_15-34-46"
+args_cli.task = "Isaac-Imitate-Anymal-D-Finetune-v0"
 args_cli.logger = "wandb"
 run_num = args_cli.run_num
+
 
 """Rest everything follows."""
 
@@ -64,7 +54,7 @@ from sweep_cfg import sweep_config, update_config_from_sweep
 import wandb
 import time
 
-SWEEP_ID_FILE = "logs/rsl_rl/anymal_d_flat/sweep_id.txt"
+SWEEP_ID_FILE = "logs/rsl_rl/anymal_d_imitation/sweep_id.txt"
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -90,7 +80,7 @@ class PicklableWandbConfig:
 
 def wandb_agent_process(sweep_id, config_queue):
     def get_agent_config():
-        wandb.init(project="isaac_lab", entity=os.environ["WANDB_USERNAME"])
+        wandb.init(project="isaaclab", entity=os.environ["WANDB_USERNAME"], sync_tensorboard=True)
         # Convert wandb.config to a PicklableWandbConfig object
         config_dict = dict(wandb.config)
         wandb_config = PicklableWandbConfig(config_dict)
@@ -99,7 +89,6 @@ def wandb_agent_process(sweep_id, config_queue):
         config_queue.get()
 
     wandb.agent(sweep_id, function=get_agent_config, project="isaaclab", count=1)
-
 
 def run_sweep():
     if run_num == 0:
@@ -125,9 +114,19 @@ def run_sweep():
         # launch omniverse app
         app_launcher = AppLauncher(args_cli)
         simulation_app = app_launcher.app
+
+        # Import extensions to set up environment tasks
+        import ext_template.tasks  # noqa: F401
+
+        from omni.isaac.lab.envs import ManagerBasedRLEnvCfg
+        from omni.isaac.lab.utils.dict import print_dict
+        from omni.isaac.lab.utils.io import dump_pickle, dump_yaml
+        from omni.isaac.lab_tasks.utils import get_checkpoint_path, parse_env_cfg
+        from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
+
         
         env_cfg = parse_env_cfg(
-            args_cli.task, use_gpu=not args_cli.cpu, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
+            args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
         )
         agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(args_cli.task, args_cli)
         env_cfg, agent_cfg = update_config_from_sweep(env_cfg, agent_cfg, wandb_config)
@@ -136,7 +135,6 @@ def run_sweep():
         # Signal the wandb process to finish
         config_queue.put(None)
         wandb_process.join()
-        
         simulation_app.close()
 
 
@@ -145,19 +143,35 @@ def run():
     app_launcher = AppLauncher(args_cli)
     simulation_app = app_launcher.app
 
+    # Import extensions to set up environment tasks
+    import ext_template.tasks  # noqa: F401
+
+    from omni.isaac.lab.envs import ManagerBasedRLEnvCfg
+    from omni.isaac.lab.utils.dict import print_dict
+    from omni.isaac.lab.utils.io import dump_pickle, dump_yaml
+    from omni.isaac.lab_tasks.utils import get_checkpoint_path, parse_env_cfg
+    from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
+
+
     # parse configuration
     env_cfg = parse_env_cfg(
-        args_cli.task, use_gpu=not args_cli.cpu, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
+        args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
     agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(args_cli.task, args_cli)
-    wandb.init(project="orbit", entity=os.environ["WANDB_USERNAME"])
+    wandb.init(project="isaaclab", entity=os.environ["WANDB_USERNAME"])
     run_experiment(env_cfg, agent_cfg)
     simulation_app.close()
 
 def run_experiment(env_cfg, agent_cfg):
     """Finetune with RSL-RL agent."""
-    
+    # Import extensions to set up environment tasks
+
+    import ext_template.tasks  # noqa: F401
+
+    from omni.isaac.lab.utils.dict import print_dict
     from omni.isaac.lab.utils.io import dump_pickle, dump_yaml
+    from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import RslRlVecEnvWrapper
+
     
     # specify directory for logging experiments
     log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)
@@ -190,12 +204,12 @@ def run_experiment(env_cfg, agent_cfg):
     # write git state to logs
     runner.add_git_repo_to_log(__file__)
     # save resume path before creating a new log_dir
-    if agent_cfg.resume:
-        # get path to previous checkpoint
-        resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
-        print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-        # load previously trained model
-        runner.load(resume_path, load_optimizer=False, load_system_dynamics=False)
+    # if agent_cfg.resume:
+    #     # get path to previous checkpoint
+    #     resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
+    #     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
+    #     # load previously trained model
+    #     runner.load(resume_path, load_optimizer=False, load_system_dynamics=False)
 
     # set seed of the environment
     env.seed(agent_cfg.seed)

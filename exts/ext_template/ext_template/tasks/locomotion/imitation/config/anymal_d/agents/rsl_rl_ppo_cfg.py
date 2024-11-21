@@ -9,14 +9,15 @@ from ext_template.tasks.locomotion.imitation.config.rl_cfg import (
 @configclass
 class AnymalDImitatePPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 10000
-    save_interval = 1000
+    max_iterations = 100
+    save_interval = 50
     experiment_name = "anymal_d_imitation"
     empirical_normalization = False
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
         actor_hidden_dims=[512, 256, 128],
         critic_hidden_dims=[512, 256, 128],
+        encoder_hidden_dims=[256, 256, 128, 128, 64, 64],
         activation="elu",
     )
     algorithm = RslRlPpoAlgorithmCfg(   

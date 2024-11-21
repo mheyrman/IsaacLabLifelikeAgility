@@ -1,54 +1,36 @@
 # sweep config
 sweep_config = {
-    'method': 'grid',  # Can be 'grid', 'random', or 'bayes'
+    'method': 'random',  # Can be 'grid', 'random', or 'bayes'
+    'metric': {'goal': 'maximize', 'name': 'Train/mean_reward'},
     'parameters': {
-        'policy_learning_rate': {
+        'learning_rate': {
             'values': [5e-5, 1e-4, 1e-3]
-        },
-        'num_steps': {
-            'values': [24, 48]
-        },
-        'history_horizon': {
-            'values': [32, 64]
-        },
-        'forecast_horizon': {
-            'values': [8, 16]
         },
         'entropy_coef': {
             'values': [0.0001, 0.0005, 0.001]
         },
-    }
+        'encoder_hidden_dims': {
+            'values': [[256, 128, 64], [256, 128, 128, 64], [256, 128, 128, 64, 64], [256, 256, 128, 128, 64, 64], [128, 128, 64, 64], [64, 64, 64, 64, 64, 64], [32, 32, 32, 32, 32, 32]]
+        },
+        'history_horizon': {
+            'values': [1, 5, 10, 15, 25]
+        },
+        'resampling_time_range': {
+            'values': [(5.0, 5.0), (10.0, 10.0)]
+        },
+    } 
 }
 
 def update_config_from_sweep(env_cfg, agent_cfg, sweep_params):
     
-    agent_cfg.algorithm.policy_learning_rate = sweep_params.policy_learning_rate
-    agent_cfg.imagination.num_steps = sweep_params.num_steps
+    # agent_cfg.algorithm.learning_rate = sweep_params.learning_rate
+    # agent_cfg.algorithm.entropy_coef = sweep_params.entropy_coef
     
-    env_cfg.observations.system_state_history.base_lin_vel.history_length = sweep_params.history_horizon + sweep_params.forecast_horizon
-    env_cfg.observations.system_state_history.base_ang_vel.history_length = sweep_params.history_horizon + sweep_params.forecast_horizon
-    env_cfg.observations.system_state_history.projected_gravity.history_length = sweep_params.history_horizon + sweep_params.forecast_horizon
-    env_cfg.observations.system_state_history.joint_pos.history_length = sweep_params.history_horizon + sweep_params.forecast_horizon
-    env_cfg.observations.system_state_history.joint_vel.history_length = sweep_params.history_horizon + sweep_params.forecast_horizon
-    env_cfg.observations.system_state_history.joint_torque.history_length = sweep_params.history_horizon + sweep_params.forecast_horizon
-    env_cfg.observations.system_action_history.pred_actions.history_length = sweep_params.history_horizon + sweep_params.forecast_horizon
-    env_cfg.observations.system_extension_history.feet_current_contact_time.history_length = sweep_params.history_horizon + sweep_params.forecast_horizon
-    env_cfg.observations.system_extension_history.feet_last_air_time.history_length = sweep_params.history_horizon + sweep_params.forecast_horizon
-    env_cfg.observations.system_contact_history.body_contact.history_length = sweep_params.history_horizon + sweep_params.forecast_horizon
-    env_cfg.observations.system_termination_history.termination_flag.history_length = sweep_params.history_horizon + sweep_params.forecast_horizon
-
-    env_cfg.observations.imagination_state_history.base_lin_vel.history_length = sweep_params.history_horizon
-    env_cfg.observations.imagination_state_history.base_ang_vel.history_length = sweep_params.history_horizon
-    env_cfg.observations.imagination_state_history.projected_gravity.history_length = sweep_params.history_horizon
-    env_cfg.observations.imagination_state_history.joint_pos.history_length = sweep_params.history_horizon
-    env_cfg.observations.imagination_state_history.joint_vel.history_length = sweep_params.history_horizon
-    env_cfg.observations.imagination_state_history.joint_torque.history_length = sweep_params.history_horizon
-    env_cfg.observations.imagination_action_history.pred_actions.history_length = sweep_params.history_horizon
-    agent_cfg.system_dynamics.history_horizon = sweep_params.history_horizon
+    agent_cfg.policy.encoder_hidden_dims = sweep_params.encoder_hidden_dims             # list: [l1, l2, ..., lf]
     
-    agent_cfg.algorithm.entropy_coef = sweep_params.entropy_coef
+    env_cfg.commands.motion_data.history_horizon = sweep_params.history_horizon         # int
+    env_cfg.commands.motion_data.resampling_time_range = sweep_params.resampling_time_range   # tuple: (min, max)
     
-    agent_cfg.max_iterations = 5000
-    agent_cfg.save_interval = 500
-    agent_cfg.imagination.num_envs = 4095
+    agent_cfg.max_iterations = 10
+    agent_cfg.save_interval = 10
     return env_cfg, agent_cfg

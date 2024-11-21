@@ -22,3 +22,5 @@ class ImitationCommandCfg(CommandTermCfg):
     rel_standing_envs: float = MISSING
 
     terms: list = MISSING
+
+    history_horizon: int = MISSING

@@ -25,6 +25,9 @@ class RslRlPpoActorCriticCfg:
     critic_hidden_dims: list[int] = MISSING
     """The hidden dimensions of the critic network."""
 
+    encoder_hidden_dims: list[int] = MISSING
+    """The hidden dimensions of the reference motion encoder."""
+
     activation: str = MISSING
     """The activation function for the actor and critic networks."""
 
@@ -120,7 +123,7 @@ class RslRlOnPolicyRunnerCfg:
     # Logging parameters
     ##
 
-    logger: Literal["tensorboard", "neptune", "wandb"] = "wandb"
+    logger: Literal["tensorboard", "neptune", "wandb"] = "tensorboard"
     """The logger to use. Default is tensorboard."""
 
     neptune_project: str = "isaaclab"

@@ -21,6 +21,7 @@ class AnymalDImitateEnvCfg(LocomotionImitationEnvCfg):
         self.curriculum.terrain_levels = None
 
 
+@configclass
 class AnymalDImitateEnvCfg_PLAY(AnymalDImitateEnvCfg):
     def __post_init__(self) -> None:
         # post init of parent
@@ -34,3 +35,14 @@ class AnymalDImitateEnvCfg_PLAY(AnymalDImitateEnvCfg):
         # remove random pushing
         self.events.base_external_force_torque = None
         self.events.push_robot = None
+
+@configclass
+class AnymalDImitateEnvCfg_FINETUNE(AnymalDImitateEnvCfg):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+        # reduce the number of environments for finetuning
+        self.scene.num_envs = 1024
+        self.scene.env_spacing = 2.5
+
+        self.observations.policy.enable_corruption = False

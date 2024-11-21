@@ -122,6 +122,7 @@ class CommandsCfg:
             # "base_vel_next",
             # "base_ang_vel_next"
         ],
+        history_horizon=10,
     )
 
 
