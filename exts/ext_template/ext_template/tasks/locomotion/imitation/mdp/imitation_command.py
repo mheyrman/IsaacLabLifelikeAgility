@@ -164,6 +164,7 @@ class ImitationCommand(CommandTerm):
         self.metrics["error_base_ang_vel"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["error_base_proj_grav"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["error_base_height"] = torch.zeros(self.num_envs, device=self.device)
+        self.metrics["error_imitation_metric"] = torch.zeros(self.num_envs, device=self.device)
 
         self.indexing_dict = {
             "joint_angles_start": 0,
@@ -257,6 +258,14 @@ class ImitationCommand(CommandTerm):
         )
         self.metrics["error_base_height"] += (
             torch.square(self.imitation_command[..., 33] - self.robot.data.root_pos_w[..., 2]) / max_command_step
+        )
+        self.metrics["error_imitation_metric"] += (
+            self.metrics["error_foot_pos"] / 7 +
+            2 * self.metrics["error_joint_pos"] / 4.5 +
+            2 * self.metrics["error_base_vel"] / 3 +
+            0.5 * self.metrics["error_base_height"] / 0.03 +
+            self.metrics["error_base_proj_grav"] / 0.4 +
+            0.5 * self.metrics["error_base_ang_vel"] / 4.5
         )
         # for metric in self.metrics:
         #     print(f"{metric}: {self.metrics[metric].mean().item()}")
