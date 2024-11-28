@@ -22,6 +22,7 @@ parser.add_argument("--seed", type=int, default=None, help="Seed used for the en
 parser.add_argument(
     "--ghost", type=bool, default=False, help="Have a ghost robot showing the motion data next to robot 0"
 )
+parser.add_argument("--dataset", type=str, default="train", help="Dataset used.")
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -52,13 +53,14 @@ from omni.isaac.lab_tasks.utils import get_checkpoint_path, parse_env_cfg
 from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, export_policy_as_onnx
 
 
-def load_motion() -> torch.Tensor():
+def load_motion(motion_dir: str) -> torch.Tensor():
     """Loads motion data in motion_data path to replay concurrently"""
     motion_data = []
     # only works with 1 motion file
-    for file in os.listdir("motion_data"):
+    motion_dir = os.path.join("motion_data", motion_dir)
+    for file in os.listdir(motion_dir):
         if file.endswith(".pt") and not file.endswith("end_points.pt"):
-            motion_data = torch.load(os.path.join("motion_data", file))
+            motion_data = torch.load(os.path.join(motion_dir, file))
     return motion_data
 
 
@@ -81,6 +83,13 @@ def main():
     print(f"[INFO] Loading experiment from directory: {log_root_path}")
     resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
     log_dir = os.path.dirname(resume_path)
+
+    motion_dir = "motion_data_train"
+    # simulate environment
+    if args_cli.dataset == "test":
+        motion_dir = "motion_data_test"
+
+    env_cfg.commands.motion_data.motion_dir = motion_dir
 
     # create isaac environment
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
@@ -115,8 +124,8 @@ def main():
     obs, _ = env.get_observations()
     timestep = 0
     motion_step = 0
-    # simulate environment
-    motion_data = load_motion()
+    motion_data = load_motion(motion_dir)
+    # note runs for 1000 iterations
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():

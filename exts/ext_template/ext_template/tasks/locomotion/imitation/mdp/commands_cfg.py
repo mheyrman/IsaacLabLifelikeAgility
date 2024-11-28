@@ -24,3 +24,5 @@ class ImitationCommandCfg(CommandTermCfg):
     terms: list = MISSING
 
     history_horizon: int = MISSING
+
+    motion_dir: str = MISSING

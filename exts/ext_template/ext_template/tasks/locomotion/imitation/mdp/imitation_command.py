@@ -50,9 +50,11 @@ class ImitationCommand(CommandTerm):
         motion_dict = {}
         motion_indices = []
         num_motions = 0
-        for file in os.listdir("motion_data"):
+        motion_dir = self.cfg.motion_dir if isinstance(self.cfg.motion_dir, str) else "motion_data_train"
+        motion_dir = os.path.join("motion_data", motion_dir)
+        for file in os.listdir(motion_dir):
             if file.endswith(".pt") and not file.endswith("end_points.pt"):
-                motion_data = torch.load(os.path.join("motion_data", file))
+                motion_data = torch.load(os.path.join(motion_dir, file))
 
                 joint_angles = torch.cat(
                     (
@@ -94,7 +96,7 @@ class ImitationCommand(CommandTerm):
                 base_height = motion_data[..., 2] + 0.1
 
                 # end points
-                end_point_data = torch.load(os.path.join("motion_data", file[:-3] + "_end_points.pt")).to(motion_data.device)
+                end_point_data = torch.load(os.path.join(motion_dir, file[:-3] + "_end_points.pt")).to(motion_data.device)
                 end_points = torch.cat(
                     (
                         end_point_data[..., 0],
@@ -259,7 +261,7 @@ class ImitationCommand(CommandTerm):
         self.metrics["error_base_height"] += (
             torch.square(self.imitation_command[..., 33] - self.robot.data.root_pos_w[..., 2]) / max_command_step
         )
-        self.metrics["error_imitation_metric"] += (
+        self.metrics["error_imitation_metric"] = (
             self.metrics["error_foot_pos"] / 7 +
             2 * self.metrics["error_joint_pos"] / 4.5 +
             2 * self.metrics["error_base_vel"] / 3 +
@@ -267,8 +269,13 @@ class ImitationCommand(CommandTerm):
             self.metrics["error_base_proj_grav"] / 0.4 +
             0.5 * self.metrics["error_base_ang_vel"] / 4.5
         )
+
+        # print("error_imitation_metric: ", self.metrics["error_imitation_metric"].mean().item())
         # for metric in self.metrics:
         #     print(f"{metric}: {self.metrics[metric].mean().item()}")
+
+    def get_metric(self):
+        return self.metrics["error_imitation_metric"].mean().item()
 
     """
     Updating the command

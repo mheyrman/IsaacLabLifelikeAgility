@@ -31,6 +31,8 @@ class RslRlPpoActorCriticCfg:
     activation: str = MISSING
     """The activation function for the actor and critic networks."""
 
+    latent_channels: int = MISSING
+
 
 @configclass
 class RslRlPpoAlgorithmCfg:
@@ -123,7 +125,7 @@ class RslRlOnPolicyRunnerCfg:
     # Logging parameters
     ##
 
-    logger: Literal["tensorboard", "neptune", "wandb"] = "wandb"
+    logger: Literal["tensorboard", "neptune", "wandb"] = "tensorboard"
     """The logger to use. Default is tensorboard."""
 
     neptune_project: str = "isaaclab"
