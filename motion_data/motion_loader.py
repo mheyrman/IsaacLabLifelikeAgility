@@ -91,7 +91,7 @@ def design_scene() -> tuple[dict, list[list[float]]]:
     }
     return scene_entities, origins
 
-
+import omni.isaac.lab.utils.math as math_utils
 def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Articulation], origins: torch.Tensor):
     """Visualizes the motion data."""
     motion_dict = {}
@@ -125,7 +125,7 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
         base_quat = motion_data[:, :, 3:7]  # base orientation quaternion in global frame
         base_v = motion_data[:, :, 7:10]  # base velocity in local frame
         base_w = motion_data[:, :, 10:13]  # base angular velocity in local frame
-        # projected_gravity = motion_data[:, :, 13:16]  # projected gravity onto base
+        projected_gravity = motion_data[:, :, 13:16]  # projected gravity onto base
         joint_angles = torch.cat(
             (
                 motion_data[:, :, 16],
@@ -144,6 +144,25 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
         ).unsqueeze(
             0
         )  # joint angles
+
+        # joint_angles = torch.cat(
+        #     (
+        #         motion_data[:, :, 16],
+        #         motion_data[:, :, 17],
+        #         motion_data[:, :, 18],
+        #         motion_data[:, :, 19],
+        #         motion_data[:, :, 20],
+        #         motion_data[:, :, 21],
+        #         motion_data[:, :, 22],
+        #         motion_data[:, :, 23],
+        #         motion_data[:, :, 24],
+        #         motion_data[:, :, 25],
+        #         motion_data[:, :, 26],
+        #         motion_data[:, :, 27],
+        #     )
+        # ).unsqueeze(
+        #     0
+        # )  # joint angles
 
         # joint_vels = torch.cat((motion_data[:, :, 28],
         #                         motion_data[:, :, 31],
@@ -179,26 +198,26 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
 
             # root state
             root_state = robot.data.default_root_state.clone()
-            if not rec:
-                root_state[:, :3] = origins[0] + 0.05
-                root_state[:, 2] = base_pos[:, count // 2, 2]
-                root_state[:, 4:7] = 0.0
-                root_state[:, 3] = 1.0
-                root_state[:, 3] = base_quat[:, count // 2, 2]
-                root_state[:, 4] = base_quat[:, count // 2, 1]
-                root_state[:, 5] = base_quat[:, count // 2, 0]
-                root_state[:, 6] = base_quat[:, count // 2, 3]
-                root_state[:, 7:] = 0.0
-            else:
-                root_state[:, :3] = 0.0
-                root_state[:, 4:7] = 0.0
-                root_state[:, 3] = 1.0
-                root_state[:, 7:] = 0.0
+            # if not rec:
+            root_state[:, :3] = origins[0] + 0.05
+            root_state[:, 2] = base_pos[:, count // 2, 2]
+            root_state[:, 4:7] = 0.0
+            root_state[:, 3] = 1.0
+            root_state[:, 3] = base_quat[:, count // 2, 2] # swap w/ 2
+            root_state[:, 4] = base_quat[:, count // 2, 1]
+            root_state[:, 5] = base_quat[:, count // 2, 0] # swap w/ 0
+            root_state[:, 6] = base_quat[:, count // 2, 3]
+            root_state[:, 7:] = 0.0
+            # else:
+            #     root_state[:, :3] = 0.0
+            #     root_state[:, 4:7] = 0.0
+            #     root_state[:, 3] = 1.0
+            #     root_state[:, 7:] = 0.0
             robot.write_root_state_to_sim(root_state)
 
             # joint state
             joint_pos = joint_angles[:, :, count // 2]
-            joint_pos = joint_pos - default_joint_pos.to(joint_pos.device)
+            joint_pos = joint_pos #- default_joint_pos.to(joint_pos.device)
             joint_pos = joint_pos.unsqueeze(0)
             joint_vel = joint_vels[:, :, count // 2]
             joint_vel = joint_vel.unsqueeze(0)
@@ -207,8 +226,15 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
             robot.write_joint_state_to_sim(joint_pos, joint_vel)
 
             if rec and count % 2 == 0:
-                foot_positions = robot.data.body_state_w[:, 13:, :3].reshape(1, -1).unsqueeze(0)
-                end_points.append(foot_positions)
+                root_angle = robot.data.root_quat_w.unsqueeze(1)  # (4096, 4), w, x, y, z
+                root_pos = robot.data.root_pos_w.unsqueeze(1)
+                foot_pos = robot.data.body_state_w[:, 13:, :3] - root_pos
+
+                # Rotate foot_pos by root_angle
+                foot_pos = math_utils.quat_rotate_inverse(root_angle, foot_pos)
+                foot_pos = foot_pos.reshape(1, -1).unsqueeze(0)
+                # foot_positions = robot.data.body_state_w[:, 13:, :3].reshape(1, -1).unsqueeze(0)
+                end_points.append(foot_pos)
 
             # reset the internal state
             robot.reset()
@@ -222,6 +248,7 @@ def visualize_motion(sim: sim_utils.SimulationContext, entities: dict[str, Artic
             robot.update(sim_dt)
 
         if rec:
+            print("SAVING END POINTS")
             end_points = torch.cat(end_points, dim=1)
             torch.save(end_points, motion_keys[data_num][:-3] + "_end_points.pt")
 

@@ -219,7 +219,6 @@ def play_experiment(env_cfg, agent_cfg):
     timestep = 0
     iter = 0
     wandb.init(project="isaaclab")
-    # note runs for 1000 iterations
     while simulation_app.is_running() and iter <= 1000:
         iter += 1
         # run everything in inference mode
@@ -228,8 +227,8 @@ def play_experiment(env_cfg, agent_cfg):
             # env stepping
             obs, _, _, _ = env.step(actions)
 
-            a = env.unwrapped.extras['log']
-            wandb.log(a)
+            log_info = env.unwrapped.extras['log']
+            wandb.log(log_info)
 
             # print(env_cfg.scene.robot.data.root_pos_w[0].detach().cpu())
         if args_cli.video:
@@ -241,6 +240,7 @@ def play_experiment(env_cfg, agent_cfg):
 
     # close the simulator
     env.close()
+    
 
 if __name__ == "__main__":
     if run_num is None:

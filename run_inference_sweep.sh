@@ -31,5 +31,5 @@ fi
 for (( run_num=0; run_num<=$num_runs; run_num++ ))
 do
     echo "Run number: $run_num"
-    python scripts/rsl_rl/sweep_inference.py --num_envs=1024 --run_num=$run_num --num_runs=$num_runs --headless
+    python scripts/rsl_rl/sweep_inference.py --num_envs=4096 --run_num=$run_num --num_runs=$num_runs --headless
 done

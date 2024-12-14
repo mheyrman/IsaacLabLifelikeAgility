@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import ext_template.tasks.locomotion.imitation.mdp as mdp
 
+import omni.isaac.lab.utils.math as math_utils
+
 from omni.isaac.lab.assets import Articulation
 from omni.isaac.lab.managers import SceneEntityCfg
 from omni.isaac.lab.sensors import ContactSensor
@@ -44,11 +46,18 @@ def track_next_frame_feet(
     """L2 reward for tracking foot position relative to base"""
     asset: Articulation = env.scene[asset_cfg.name]
     # TODO: get foot position in body frame, will probably require transformation from world to body frame
-    root_pos_w = asset.data.root_pos_w.unsqueeze(1)     # should return [4096, 1, 3]
-    foot_pos_w = asset.data.body_state_w[:, 13:, :3]    # should return [4096, 4, 3]
+    # root_pos_w = asset.data.root_pos_w.unsqueeze(1)     # should return [4096, 1, 3]
+    # foot_pos_w = asset.data.body_state_w[:, 13:, :3]    # should return [4096, 4, 3]
+
+    root_angle_w = asset.data.root_quat_w.unsqueeze(1)  # (4096, 4), w, x, y, z
+    root_pos_w = asset.data.root_pos_w.unsqueeze(1)
+    foot_pos_w = asset.data.body_state_w[:, 13:, :3] - root_pos_w
+
+    # Rotate foot_pos by root_angle
+    foot_pos_b = math_utils.quat_rotate_inverse(root_angle_w, foot_pos_w)
 
     # subtract the 2nd dim of root_pos_w from foot_pos_w
-    foot_pos_b = foot_pos_w - root_pos_w
+    # foot_pos_b = foot_pos_w - root_pos_w
     foot_pos_b = foot_pos_b.reshape(-1, 12)
 
     foot_pos_command = mdp.generated_imitation_commands(env=env, command_name=command_name, custom_motion=True)[..., :12]

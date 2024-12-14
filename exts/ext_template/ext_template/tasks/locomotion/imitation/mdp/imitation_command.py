@@ -168,6 +168,47 @@ class ImitationCommand(CommandTerm):
         self.metrics["error_base_height"] = torch.zeros(self.num_envs, device=self.device)
         self.metrics["error_imitation_metric"] = torch.zeros(self.num_envs, device=self.device)
 
+        # abuse metrics for storing plot-relevant information for testing
+        self.compare = False
+        self.data_dict = {}
+        self.ext_iter = 0
+        if self.compare:
+            self.data_dict = {
+                "motion_foot1_x": [],
+                "motion_foot1_y": [],
+                "motion_foot1_z": [],
+                "motion_foot2_x": [],
+                "motion_foot2_y": [],
+                "motion_foot2_z": [],
+                "motion_foot3_x": [],
+                "motion_foot3_y": [],
+                "motion_foot3_z": [],
+                "motion_foot4_x": [],
+                "motion_foot4_y": [],
+                "motion_foot4_z": [],
+                "motion_proj_grav_x": [],
+                "motion_proj_grav_y": [],
+                "motion_proj_grav_z": [],
+                "motion_height": [],
+                "robot_foot1_x": [],
+                "robot_foot1_y": [],
+                "robot_foot1_z": [],
+                "robot_foot2_x": [],
+                "robot_foot2_y": [],
+                "robot_foot2_z": [],
+                "robot_foot3_x": [],
+                "robot_foot3_y": [],
+                "robot_foot3_z": [],
+                "robot_foot4_x": [],
+                "robot_foot4_y": [],
+                "robot_foot4_z": [],
+                "robot_proj_grav_x": [],
+                "robot_proj_grav_y": [],
+                "robot_proj_grav_z": [],
+                "robot_height": []
+            }
+            
+
         self.indexing_dict = {
             "joint_angles_start": 0,
             "joint_angles_len": 12,
@@ -234,9 +275,13 @@ class ImitationCommand(CommandTerm):
         # time when executed
         max_command_time = self.cfg.resampling_time_range[1]
         max_command_step = max_command_time / self._env.step_dt
-        
+
+        root_angle = self.robot.data.root_quat_w.unsqueeze(1)  # (4096, 4), w, x, y, z
         root_pos = self.robot.data.root_pos_w.unsqueeze(1)
         foot_pos = self.robot.data.body_state_w[:, 13:, :3] - root_pos
+
+        # Rotate foot_pos by root_angle
+        foot_pos = math_utils.quat_rotate_inverse(root_angle, foot_pos)
 
         # log data
         self.metrics["error_foot_pos"] += (
@@ -273,7 +318,7 @@ class ImitationCommand(CommandTerm):
         # print("error_imitation_metric: ", self.metrics["error_imitation_metric"].mean().item())
         # for metric in self.metrics:
         #     print(f"{metric}: {self.metrics[metric].mean().item()}")
-
+    
     def get_metric(self):
         return self.metrics["error_imitation_metric"].mean().item()
 
@@ -310,6 +355,11 @@ class ImitationCommand(CommandTerm):
         """
         Post-process the imitation command.
         """
+        if self.compare:
+            self.set_comp_metrics()
+            if self.ext_iter == 999:
+                self.plot_metrics()
+
         self.imitation_command[...] = torch.transpose(
             torch.index_select(self.motion, 1, (self.motion_index // 1).type(torch.int32)), 0, 1
         )
@@ -421,3 +471,113 @@ class ImitationCommand(CommandTerm):
     #     ).to(self.device)
 
     #     return prop_commands
+
+    def set_comp_metrics(self):
+        self.ext_iter += 1
+        self.data_dict["motion_foot1_x"].append(self.imitation_command[0, 34].item())
+        self.data_dict["motion_foot1_y"].append(self.imitation_command[0, 35].item())
+        self.data_dict["motion_foot1_z"].append(self.imitation_command[0, 36].item())
+        self.data_dict["motion_foot2_x"].append(self.imitation_command[0, 37].item())
+        self.data_dict["motion_foot2_y"].append(self.imitation_command[0, 38].item())
+        self.data_dict["motion_foot2_z"].append(self.imitation_command[0, 39].item())
+        self.data_dict["motion_foot3_x"].append(self.imitation_command[0, 40].item())
+        self.data_dict["motion_foot3_y"].append(self.imitation_command[0, 41].item())
+        self.data_dict["motion_foot3_z"].append(self.imitation_command[0, 42].item())
+        self.data_dict["motion_foot4_x"].append(self.imitation_command[0, 43].item())
+        self.data_dict["motion_foot4_y"].append(self.imitation_command[0, 44].item())
+        self.data_dict["motion_foot4_z"].append(self.imitation_command[0, 45].item())
+        self.data_dict["motion_proj_grav_x"].append(self.imitation_command[0, 30].item())
+        self.data_dict["motion_proj_grav_y"].append(self.imitation_command[0, 31].item())
+        self.data_dict["motion_proj_grav_z"].append(self.imitation_command[0, 32].item())
+        self.data_dict["motion_height"].append(self.imitation_command[0, 33].item())
+
+        root_angle = self.robot.data.root_quat_w.unsqueeze(1)  # (4096, 4), w, x, y, z
+        root_pos = self.robot.data.root_pos_w.unsqueeze(1)
+        foot_pos = self.robot.data.body_state_w[:, 13:, :3] - root_pos
+
+        # Rotate foot_pos by root_angle
+        foot_pos = math_utils.quat_rotate_inverse(root_angle, foot_pos)
+
+        self.data_dict["robot_foot1_x"].append(foot_pos[0, 0, 0].item())
+        self.data_dict["robot_foot1_y"].append(foot_pos[0, 0, 1].item())
+        self.data_dict["robot_foot1_z"].append(foot_pos[0, 0, 2].item())
+        self.data_dict["robot_foot2_x"].append(foot_pos[0, 1, 0].item())
+        self.data_dict["robot_foot2_y"].append(foot_pos[0, 1, 1].item())
+        self.data_dict["robot_foot2_z"].append(foot_pos[0, 1, 2].item())
+        self.data_dict["robot_foot3_x"].append(foot_pos[0, 2, 0].item())
+        self.data_dict["robot_foot3_y"].append(foot_pos[0, 2, 1].item())
+        self.data_dict["robot_foot3_z"].append(foot_pos[0, 2, 2].item())
+        self.data_dict["robot_foot4_x"].append(foot_pos[0, 3, 0].item())
+        self.data_dict["robot_foot4_y"].append(foot_pos[0, 3, 1].item())
+        self.data_dict["robot_foot4_z"].append(foot_pos[0, 3, 2].item())
+        self.data_dict["robot_proj_grav_x"].append(self.robot.data.projected_gravity_b[0, 0].item())
+        self.data_dict["robot_proj_grav_y"].append(self.robot.data.projected_gravity_b[0, 1].item())
+        self.data_dict["robot_proj_grav_z"].append(self.robot.data.projected_gravity_b[0, 2].item())
+        self.data_dict["robot_height"].append(self.robot.data.root_pos_w[0, 2].item())
+
+
+    def plot_metrics(self):
+        import matplotlib.pyplot as plt
+        from datetime import datetime
+
+        fig, axs = plt.subplots(3, 2, figsize=(15, 10))
+        fig.suptitle('Detailed Metrics Comparison', fontsize=16)
+
+        axs[0, 0].plot(self.data_dict["motion_proj_grav_x"], 'b--', label='motion_x')
+        axs[0, 0].plot(self.data_dict["robot_proj_grav_x"], 'b', label='robot_x')
+        axs[0, 0].plot(self.data_dict["motion_proj_grav_y"], 'y--', label='motion_y')
+        axs[0, 0].plot(self.data_dict["robot_proj_grav_y"], 'y', label='robot_y')
+        axs[0, 0].plot(self.data_dict["motion_proj_grav_z"], 'r--', label='motion_z')
+        axs[0, 0].plot(self.data_dict["robot_proj_grav_z"], 'r', label='robot_z')
+        axs[0, 0].set_title('Projected Gravity')
+        axs[0, 0].legend()
+        axs[0, 0].grid(True)
+
+        axs[0, 1].plot(self.data_dict["motion_height"], 'r--', label='motion')
+        axs[0, 1].plot(self.data_dict["robot_height"], 'b', label='robot')
+        axs[0, 1].set_title('Base Height')
+        axs[0, 1].legend()
+        axs[0, 1].grid(True)
+
+        axs[1, 0].plot(self.data_dict["motion_foot1_x"], 'b--', label='motion_x')
+        axs[1, 0].plot(self.data_dict["robot_foot1_x"], 'b', label='robot_x')
+        axs[1, 0].plot(self.data_dict["motion_foot1_y"], 'y--', label='motion_y')
+        axs[1, 0].plot(self.data_dict["robot_foot1_y"], 'y', label='robot_y')
+        axs[1, 0].plot(self.data_dict["motion_foot1_z"], 'r--', label='motion_z')
+        axs[1, 0].plot(self.data_dict["robot_foot1_z"], 'r', label='robot_z')
+        axs[1, 0].set_title('Foot1 Position')
+        # axs[1, 0].legend()
+        axs[1, 0].grid(True)
+
+        axs[1, 1].plot(self.data_dict["motion_foot2_x"], 'b--', label='motion_x')
+        axs[1, 1].plot(self.data_dict["robot_foot2_x"], 'b', label='robot_x')
+        axs[1, 1].plot(self.data_dict["motion_foot2_y"], 'y--', label='motion_y')
+        axs[1, 1].plot(self.data_dict["robot_foot2_y"], 'y', label='robot_y')
+        axs[1, 1].plot(self.data_dict["motion_foot2_z"], 'r--', label='motion_z')
+        axs[1, 1].plot(self.data_dict["robot_foot2_z"], 'r', label='robot_z')
+        axs[1, 1].set_title('Foot2 Position')
+        # axs[1, 1].legend()
+        axs[1, 1].grid(True)
+
+        axs[2, 0].plot(self.data_dict["motion_foot3_x"], 'b--', label='motion_x')
+        axs[2, 0].plot(self.data_dict["robot_foot3_x"], 'b', label='robot_x')
+        axs[2, 0].plot(self.data_dict["motion_foot3_y"], 'y--', label='motion_y')
+        axs[2, 0].plot(self.data_dict["robot_foot3_y"], 'y', label='robot_y')
+        axs[2, 0].plot(self.data_dict["motion_foot3_z"], 'r--', label='motion_z')
+        axs[2, 0].plot(self.data_dict["robot_foot3_z"], 'r', label='robot_z')
+        axs[2, 0].set_title('Foot3 Position')
+        # axs[2, 0].legend()
+        axs[2, 0].grid(True)
+
+        axs[2, 1].plot(self.data_dict["motion_foot4_x"], 'b--', label='motion_x')
+        axs[2, 1].plot(self.data_dict["robot_foot4_x"], 'b', label='robot_x')
+        axs[2, 1].plot(self.data_dict["motion_foot4_y"], 'y--', label='motion_y')
+        axs[2, 1].plot(self.data_dict["robot_foot4_y"], 'y', label='robot_y')
+        axs[2, 1].plot(self.data_dict["motion_foot4_z"], 'r--', label='motion_z')
+        axs[2, 1].plot(self.data_dict["robot_foot4_z"], 'r', label='robot_z')
+        axs[2, 1].set_title('Foot4 Position')
+        # axs[2, 1].legend()
+        axs[2, 1].grid(True)
+
+        # save plot as stats_{current_time}.png
+        plt.savefig(f"stats_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png", dpi=300)
